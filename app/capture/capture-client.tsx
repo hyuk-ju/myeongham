@@ -15,7 +15,8 @@ export function CaptureClient({
   connected: boolean;
   knownTags: string[];
 }) {
-  const fileRef = useRef<HTMLInputElement>(null);
+  const albumRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<Phase>("pick");
   const [preview, setPreview] = useState<string | null>(null);
   const [imagePath, setImagePath] = useState<string | null>(null);
@@ -116,7 +117,8 @@ export function CaptureClient({
     setDraft(EMPTY_DRAFT);
     setError(null);
     setDuplicates(null);
-    if (fileRef.current) fileRef.current.value = "";
+    if (albumRef.current) albumRef.current.value = "";
+    if (cameraRef.current) cameraRef.current.value = "";
   }
 
   if (!connected) {
@@ -161,21 +163,36 @@ export function CaptureClient({
       )}
 
       {phase === "pick" && !preview && (
-        <button
-          onClick={() => fileRef.current?.click()}
-          className="flex w-full flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-line-strong bg-surface/60 px-6 py-14 text-center"
-        >
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-soft text-brand">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7">
-              <path d="M4 8h2.5L8 5.8h8L17.5 8H20a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" />
-              <circle cx="12" cy="13" r="3.5" />
-            </svg>
-          </span>
-          <span className="font-semibold">명함을 찍거나 사진을 고르세요</span>
-          <span className="text-[13px] text-soft">
-            촬영하면 AI가 읽어서 정리해 드립니다
-          </span>
-        </button>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button
+            onClick={() => cameraRef.current?.click()}
+            className="flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-brand/40 bg-brand-soft/30 px-6 py-10 text-center transition active:scale-[0.98]"
+          >
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand text-brand-ink">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7">
+                <path d="M4 8h2.5L8 5.8h8L17.5 8H20a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" />
+                <circle cx="12" cy="13" r="3.5" />
+              </svg>
+            </span>
+            <span className="font-semibold text-foreground">명함 촬영하기</span>
+            <span className="text-[13px] text-soft">카메라로 바로 촬영</span>
+          </button>
+
+          <button
+            onClick={() => albumRef.current?.click()}
+            className="flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-line-strong bg-surface/60 px-6 py-10 text-center transition active:scale-[0.98]"
+          >
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-hover text-foreground">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7">
+                <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                <circle cx="9" cy="9" r="2" />
+                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+              </svg>
+            </span>
+            <span className="font-semibold text-foreground">앨범에서 선택하기</span>
+            <span className="text-[13px] text-soft">저장된 명함 사진 선택</span>
+          </button>
+        </div>
       )}
 
       {preview && (
@@ -201,10 +218,23 @@ export function CaptureClient({
         <CardForm draft={draft} onChange={setDraft} knownTags={knownTags} />
       )}
 
+      {/* 앨범 선택용 (capture 속성 제거로 iOS 사진 보관함 지원) */}
       <input
-        ref={fileRef}
+        ref={albumRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFile(file);
+        }}
+      />
+
+      {/* 카메라 직접 촬영용 (capture="environment") */}
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/*"
         capture="environment"
         className="hidden"
         onChange={(e) => {
@@ -222,12 +252,20 @@ export function CaptureClient({
       >
         <div className="mx-auto flex max-w-2xl gap-2 pb-3">
           {phase === "pick" && (
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="flex-1 rounded-xl bg-brand px-4 py-3.5 text-sm font-semibold text-brand-ink"
-            >
-              명함 촬영 / 선택
-            </button>
+            <>
+              <button
+                onClick={() => cameraRef.current?.click()}
+                className="flex-1 rounded-xl bg-brand px-3 py-3.5 text-sm font-semibold text-brand-ink"
+              >
+                📷 카메라 촬영
+              </button>
+              <button
+                onClick={() => albumRef.current?.click()}
+                className="flex-1 rounded-xl border border-line bg-surface px-3 py-3.5 text-sm font-semibold text-foreground"
+              >
+                🖼️ 앨범에서 선택
+              </button>
+            </>
           )}
 
           {phase === "analyzing" && (
