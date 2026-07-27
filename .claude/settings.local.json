@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__supabase__list_migrations",
+      "mcp__supabase__get_publishable_keys",
+      "mcp__supabase__apply_migration",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__get_advisors",
+      "Bash(sed -i '' 's/await saveTokenSet\\(auth.supabase, auth.user.id, tokens\\);/await saveTokenSet\\(auth.supabase, auth.user.id, \"openai-codex\", tokens\\);/' app/api/chatgpt/finish/route.ts)",
+      "Bash(sed -i '' 's/await deleteToken\\(auth.supabase, auth.user.id\\);/await deleteToken\\(auth.supabase, auth.user.id, \"openai-codex\"\\);/' app/api/chatgpt/disconnect/route.ts)",
+      "Bash(sed -i '' 's|\"./lib/phone\"|\"/Users/hy/Documents/02_프로젝트/01_진행중/10_명함 폴더/lib/phone\"|' /private/tmp/claude-501/-Users-hy-Documents-02------01-----10------/fc3e476e-9ea5-483c-bb4a-ac07f26c57fb/scratchpad/phone-test.ts)",
+      "Bash(npx tsx *)",
+      "Bash(python3 -)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "supabase"
+  ]
+}
