@@ -17,25 +17,23 @@ export type AIContent =
   | { type: "input_text"; text: string }
   | { type: "input_image"; image_url: string };
 
-/** SSE 스트림에서 출력 텍스트를 긁어모은다. */
-async function readSse(res: Response): Promise<string> {
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error("응답 본문이 비어 있습니다.");
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let text = "";
-  let finalText: string | null = null;
+/** SSE 텍스트 또는 JSON 백엔드 응답에서 최종 출력 텍스트를 방어적으로 추출한다. */
+async function parseCodexResponseBody(res: Response): Promise<string> {
+  const rawText = await res.text();
+  const trimmed = rawText.trim();
 
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
+  // 1. SSE 스트림 형식 처리 (Content-Type 헤더와 무관하게 data: 또는 event: 가 포함된 경우)
+  if (trimmed.includes("data:") || trimmed.includes("event:")) {
+    const lines = trimmed.split("\n");
+    let text = "";
+    let finalText: string | null = null;
+
     for (const line of lines) {
-      if (!line.startsWith("data:")) continue;
-      const payload = line.slice(5).trim();
+      const lineTrimmed = line.trim();
+      if (!lineTrimmed.startsWith("data:")) continue;
+      const payload = lineTrimmed.slice(5).trim();
       if (!payload || payload === "[DONE]") continue;
+
       try {
         const event = JSON.parse(payload);
         if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
@@ -46,7 +44,6 @@ async function readSse(res: Response): Promise<string> {
         ) {
           finalText = event.text;
         } else if (event.type === "response.completed" && event.response?.output) {
-          // 최종 이벤트에서 전체 출력을 복원 (delta 누락 대비)
           const parts: string[] = [];
           for (const item of event.response.output) {
             for (const c of item?.content ?? []) {
@@ -56,11 +53,21 @@ async function readSse(res: Response): Promise<string> {
           if (parts.length) finalText = parts.join("");
         }
       } catch {
-        // 파싱 불가 이벤트는 무시
+        // 무시
       }
     }
+    const result = finalText ?? text;
+    if (result && result.trim()) return result;
   }
-  return finalText ?? text;
+
+  // 2. 단일 JSON 응답 처리 시도
+  try {
+    const json = JSON.parse(trimmed);
+    return extractTextFromJson(json);
+  } catch {
+    // 3. 순수 텍스트 응답일 경우 그대로 반환
+    return trimmed;
+  }
 }
 
 /** 비스트림 JSON 응답 대비 (백엔드 동작이 바뀔 수 있음) */
@@ -120,10 +127,7 @@ export async function codexRequest(
     throw new Error(`AI 요청 실패 (${res.status}): ${text.slice(0, 300)}`);
   }
 
-  const contentType = res.headers.get("content-type") ?? "";
-  return contentType.includes("text/event-stream")
-    ? readSse(res)
-    : extractTextFromJson(await res.json());
+  return parseCodexResponseBody(res);
 }
 
 /** 모델 출력에서 JSON 객체 하나를 방어적으로 파싱한다 (코드펜스 등 제거). */
