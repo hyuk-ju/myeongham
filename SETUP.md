@@ -89,18 +89,44 @@ http://localhost:3000 접속 → Clerk 로그인 화면에서 **Google 로 로�
 
 ---
 
-## 6. Vercel 배포 (선택 — 폰에서 쓰려면 필요)
+## 6. Vercel 배포 (폰에서 쓰려면 필요)
 
-1. 이 폴더를 GitHub 저장소로 올립니다
-2. [vercel.com](https://vercel.com) → **Add New Project** → 저장소 선택
-3. **Environment Variables** 에 `.env.local` 의 값을 그대로 옮깁니다
-   (Supabase 2개 + Clerk 2개 + `ALLOWED_EMAILS`)
-4. Deploy
-5. Clerk 은 개발 인스턴스라 배포 도메인에서 쓰려면 **Production 인스턴스**를
-   만들어야 합니다 (`clerk deploy` 또는 Clerk 대시보드). 그때 발급되는
-   프로덕션 도메인(`https://clerk.내도메인.com`)을 Supabase Third-Party Auth 에
-   **추가로** 등록하세요 — 개발용 도메인과 별개입니다.
-6. 폰에서 접속 → 공유 → **홈 화면에 추가** 하면 앱처럼 쓸 수 있습니다
+**GitHub 푸시는 완료했습니다** → https://github.com/hyuk-ju/- (private, `main`)
+앞으로는 `git push` 만 하면 Vercel 이 자동 재배포합니다.
+
+### 남은 단계
+
+1. [vercel.com/new](https://vercel.com/new) → GitHub 계정 연결 → 저장소 `-` 선택
+2. **Environment Variables** 에 아래 5개를 넣습니다 (`.env.local` 에서 그대로 복사)
+
+   | 변수 | 비고 |
+   |---|---|
+   | `NEXT_PUBLIC_SUPABASE_URL` | |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | |
+   | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | |
+   | `CLERK_SECRET_KEY` | 비밀값 — 절대 코드에 넣지 말 것 |
+   | `ALLOWED_EMAILS` | 본인 이메일 |
+
+   > `.env.local` 은 `.gitignore` 에 있어 저장소에 올라가지 않습니다. 그래서
+   > Vercel 에는 직접 넣어야 합니다.
+
+3. **Deploy**
+
+### 배포 후 — Clerk 프로덕션 인스턴스
+
+지금 Clerk 은 **개발 인스턴스**(`pk_test_…`)라 배포 도메인에서 제대로 안 됩니다.
+실제로 쓰려면:
+
+1. Clerk 대시보드에서 **Production 인스턴스** 생성 (또는 `clerk deploy`)
+2. Vercel 환경변수의 Clerk 키 2개를 프로덕션 키(`pk_live_…`, `sk_live_…`)로 교체
+3. 프로덕션 Clerk 도메인(`https://clerk.내도메인.com`)을
+   **Supabase → Third-Party Auth** 에 **추가로** 등록 (개발용과 별개입니다)
+4. 프로덕션 인스턴스에도 세션 토큰 `role: authenticated` 클레임 설정
+   (`clerk config patch --instance prod --json '{"session":{"claims":{"role":"authenticated"}}}'`)
+
+### 폰에서 앱처럼 쓰기
+
+배포 주소 접속 → 공유 → **홈 화면에 추가**
 
 ---
 

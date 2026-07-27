@@ -53,9 +53,18 @@ export function EnrichPanel({
     }
   }
 
-  const newTags = result
-    ? result.capabilities.filter((t) => !currentCapabilities.includes(t))
-    : [];
+  // 제안 태그는 담아도 목록에서 빼지 않는다 — 빼버리면 화면 위쪽 칩 영역이
+  // 보이지 않는 상태에서 누른 사용자에게 "적용됐다"는 신호가 남지 않는다.
+  const suggested = result?.capabilities ?? [];
+  const appliedCount = suggested.filter((t) => currentCapabilities.includes(t)).length;
+
+  function toggleTag(tag: string) {
+    onApply({
+      capabilities: currentCapabilities.includes(tag)
+        ? currentCapabilities.filter((t) => t !== tag)
+        : [...currentCapabilities, tag],
+    });
+  }
 
   return (
     <section className="mt-6 space-y-3 rounded-2xl border border-line bg-surface p-4 shadow-sm">
@@ -101,27 +110,38 @@ export function EnrichPanel({
 
           {result.summary && <p className="text-sm text-soft">{result.summary}</p>}
 
-          {result.industry && result.industry !== currentIndustry && (
+          {result.industry && (
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm">
                 업종: <span className="font-medium">{result.industry}</span>
               </span>
-              <button
-                onClick={() => onApply({ industry: result.industry! })}
-                className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium"
-              >
-                업종 적용
-              </button>
+              {result.industry === currentIndustry ? (
+                <span className="shrink-0 rounded-lg bg-ok-soft px-2.5 py-1 text-xs font-semibold text-ok">
+                  적용됨 ✓
+                </span>
+              ) : (
+                <button
+                  onClick={() => onApply({ industry: result.industry! })}
+                  className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium"
+                >
+                  업종 적용
+                </button>
+              )}
             </div>
           )}
 
-          {newTags.length > 0 ? (
+          {suggested.length > 0 ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-soft">제안 태그</span>
+                <span className="text-xs font-semibold text-soft">
+                  제안 태그{" "}
+                  <span className="font-normal text-faint">— 눌러서 담기/빼기</span>
+                </span>
                 <button
                   onClick={() =>
-                    onApply({ capabilities: [...currentCapabilities, ...newTags] })
+                    onApply({
+                      capabilities: [...new Set([...currentCapabilities, ...suggested])],
+                    })
                   }
                   className="text-xs font-medium text-brand"
                 >
@@ -129,21 +149,33 @@ export function EnrichPanel({
                 </button>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {newTags.map((tag) => (
-                  <button
-                    key={tag}
-                    onClick={() =>
-                      onApply({ capabilities: [...currentCapabilities, tag] })
-                    }
-                    className="rounded-full border border-brand/30 bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand"
-                  >
-                    + {tag}
-                  </button>
-                ))}
+                {suggested.map((tag) => {
+                  const on = currentCapabilities.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      onClick={() => toggleTag(tag)}
+                      aria-pressed={on}
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+                        on
+                          ? "bg-brand text-brand-ink"
+                          : "border border-brand/30 bg-brand-soft text-brand"
+                      }`}
+                    >
+                      {on ? `${tag} ✓` : `+ ${tag}`}
+                    </button>
+                  );
+                })}
               </div>
+              {appliedCount > 0 && (
+                <p className="rounded-lg bg-ok-soft px-3 py-2 text-xs font-medium text-ok">
+                  {appliedCount}개 담았습니다. 아래 <strong>변경사항 저장</strong>을 눌러야
+                  실제로 반영됩니다.
+                </p>
+              )}
             </div>
           ) : (
-            <p className="text-xs text-faint">추가할 만한 새 태그를 찾지 못했습니다.</p>
+            <p className="text-xs text-faint">제안할 태그를 찾지 못했습니다.</p>
           )}
 
           {result.sources.length > 0 && (
@@ -166,9 +198,6 @@ export function EnrichPanel({
             </details>
           )}
 
-          <p className="text-xs text-faint">
-            담은 값은 아래 <strong>변경사항 저장</strong>을 눌러야 반영됩니다.
-          </p>
         </div>
       )}
     </section>

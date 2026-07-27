@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 명함첩
 
-## Getting Started
+받은 명함을 찍어두면 필요할 때 찾아주는 개인용 명함 관리 앱.
 
-First, run the development server:
+목적은 저장이 아니라 **질의**입니다:
+
+> "A라는 설비를 만들 수 있는 회사와 담당자 전화번호·메일주소 정리해줘"
+
+이 한 문장에 필요한 연락처가 표로 나오는 것이 이 앱의 목표입니다.
+
+---
+
+## 무엇을 하나
+
+| 화면 | 하는 일 |
+|---|---|
+| 홈 | 등록 수, 역량 태그 없는 명함 수, 최근 등록, 검색 |
+| 촬영 | 명함 촬영 → AI 인식 → 확인·수정 → 저장 (연속 촬영) |
+| 명함 | 목록·검색·태그 필터, 상세 수정/삭제, 같은 회사 동료, 명함 이력 |
+| 질문 | 자연어로 물으면 조건 검색 후 AI가 연락처 표로 정리 (복사·CSV) |
+| 설정 | AI 연결(ChatGPT/Claude), 작업별 모델 선택, 계정 |
+
+### 핵심 설계 — 역량 태그
+
+명함에는 "이 회사가 무엇을 만드는지"가 거의 안 적혀 있습니다. OCR 만으로는 위 질의에
+답할 수 없어서, `capabilities` 태그를 세 경로로 채웁니다.
+
+1. 명함 텍스트에서 추출 (자동)
+2. **회사명 웹 검색으로 보강** — 상세 화면의 *웹에서 회사 정보 찾기*
+3. 사용자가 직접 입력 (가장 정확)
+
+2번은 오답 가능성이 있어 **자동 저장하지 않고** 제안만 하며, 사용자가 고른 것만
+담깁니다 (`capabilities_source` 에 근거를 기록).
+
+---
+
+## 기술 구성
+
+- **Next.js 16** (App Router) / TypeScript / Tailwind CSS 4 / PWA
+- **Clerk** — 로그인 (Google 등 소셜). `ALLOWED_EMAILS` 로 이중 차단
+- **Supabase** — Postgres + Storage. RLS 는 Clerk 세션 토큰의 `sub` 기준
+- **AI** — ChatGPT(Codex) 또는 Claude **구독 OAuth**. API 키를 쓰지 않아
+  토큰당 과금이 없습니다. 명함 인식과 질문 답변에 각각 다른 모델을 지정할 수 있습니다.
+
+AI 호출은 `lib/ai/llm.ts` 한 곳으로 모입니다. 비공식 표면(Codex 백엔드)은
+`lib/ai/codex.ts` 에 격리돼 있어 바뀌어도 한 파일만 고치면 됩니다.
+
+---
+
+## 실행
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+환경변수(`.env.local`)와 Supabase↔Clerk 연결은 [SETUP.md](SETUP.md) 참고.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 알아둘 것
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **OCR 은 100% 가 아닙니다.** 확인·수정 단계를 생략하지 않습니다. 잘못 저장된
+  연락처는 나중에 질의 결과를 조용히 오염시킵니다.
+- **개인정보**: 명함은 성명·연락처·소속이 결합된 개인정보입니다. 외부 클라우드
+  (Supabase/Clerk/AI 제공자)에 저장·전송하는 구성이 사내 규정상 허용되는지
+  확인해 두시길 권합니다.
+- 전화번호는 국가번호(+82/+84)를 현지 표기로 자동 변환해 저장합니다.
