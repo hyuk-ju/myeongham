@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { isEmailAllowed } from "@/lib/env";
+import { isUserAllowed } from "@/lib/env";
 
 export interface AuthedUser {
   /** Clerk 사용자 ID — cards.owner_id 에 그대로 들어간다 */
@@ -22,7 +22,9 @@ export async function requireUser(): Promise<{
 }> {
   const resolved = await resolveUser();
   if (!resolved) redirect("/sign-in");
-  if (!isEmailAllowed(resolved.user.email)) redirect("/sign-in?error=not_allowed");
+  // 허용 목록 밖이면 본인 식별자를 보여주는 안내 화면으로 보낸다.
+  // (Apple 이메일 가리기 때문에 이메일만으로는 등록이 어려울 수 있다)
+  if (!isUserAllowed(resolved.user.email, resolved.user.id)) redirect("/not-allowed");
 
   return resolved;
 }
@@ -33,24 +35,26 @@ export async function getAuthorizedUser(): Promise<{
   supabase: SupabaseClient;
 } | null> {
   const resolved = await resolveUser();
-  if (!resolved || !isEmailAllowed(resolved.user.email)) return null;
+  if (!resolved || !isUserAllowed(resolved.user.email, resolved.user.id)) return null;
   return resolved;
+}
+
+/** 로그인 여부만 확인한다 (허용 목록 검사 없음) — /not-allowed 화면 전용. */
+export async function getSignedInUser(): Promise<AuthedUser | null> {
+  const { userId } = await auth();
+  if (!userId) return null;
+  const clerkUser = await currentUser();
+  return {
+    id: userId,
+    email: clerkUser?.primaryEmailAddress?.emailAddress ?? null,
+  };
 }
 
 async function resolveUser(): Promise<{
   user: AuthedUser;
   supabase: SupabaseClient;
 } | null> {
-  const { userId } = await auth();
-  if (!userId) return null;
-
-  // 이메일은 allowlist 검사에만 쓴다. Clerk 쪽 조회가 실패하면
-  // 통과시키지 않고 그대로 거부한다.
-  const clerkUser = await currentUser();
-  const email = clerkUser?.primaryEmailAddress?.emailAddress ?? null;
-
-  return {
-    user: { id: userId, email },
-    supabase: createClient(),
-  };
+  const user = await getSignedInUser();
+  if (!user) return null;
+  return { user, supabase: createClient() };
 }
