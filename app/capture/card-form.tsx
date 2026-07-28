@@ -137,9 +137,24 @@ export function CardForm({ draft, onChange, knownTags, expanded = false }: Props
 
       {/* 역량 태그 — 이 앱의 검색 품질을 좌우하는 부분 */}
       <div className="space-y-2 rounded-2xl border border-line bg-surface p-4 shadow-sm">
-        <span className="text-xs font-semibold text-soft">
-          역량 태그 <span className="font-normal text-faint">— 이 회사가 뭘 만드는지</span>
-        </span>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs font-semibold text-soft">
+            역량 태그 <span className="font-normal text-faint">— 이 회사가 뭘 만드는지</span>
+            {draft.capabilities.length > 0 && (
+              <span className="font-normal text-faint"> ({draft.capabilities.length})</span>
+            )}
+          </span>
+          {/* 웹 보강이 태그를 여러 개 담았을 때 하나씩 지우지 않아도 되게 한다 */}
+          {draft.capabilities.length > 0 && (
+            <button
+              type="button"
+              onClick={() => set("capabilities", [])}
+              className="shrink-0 text-xs font-medium text-soft underline"
+            >
+              전부 지우기
+            </button>
+          )}
+        </div>
 
         {draft.capabilities.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
