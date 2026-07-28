@@ -38,8 +38,18 @@ export function EnrichPanel({
   subject: EnrichSubject;
   currentIndustry: string | null;
   currentCapabilities: string[];
-  /** 고른 값을 폼 드래프트에 반영한다 (저장은 각 화면의 저장 버튼으로) */
-  onApply: (patch: { industry?: string; capabilities?: string[] }) => void;
+  /**
+   * 고른 값을 폼 드래프트에 반영한다 (저장은 각 화면의 저장 버튼으로).
+   *
+   * fromWeb 은 capabilities_source 를 정하는 데 쓴다. 이 패널에서 나온 태그만
+   * 'web' 이다 — 같은 회사 카드에서 복사한 태그까지 'web' 으로 찍히면 근거가
+   * 틀려진다.
+   */
+  onApply: (patch: {
+    industry?: string;
+    capabilities?: string[];
+    fromWeb?: boolean;
+  }) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +81,7 @@ export function EnrichPanel({
         const merged = [...new Set([...currentCapabilities, ...suggestion.capabilities])];
         onApply({
           capabilities: merged,
+          fromWeb: true,
           ...(suggestion.industry && !currentIndustry
             ? { industry: suggestion.industry }
             : {}),
@@ -90,6 +101,7 @@ export function EnrichPanel({
 
   function toggleTag(tag: string) {
     onApply({
+      fromWeb: true,
       capabilities: currentCapabilities.includes(tag)
         ? currentCapabilities.filter((t) => t !== tag)
         : [...currentCapabilities, tag],
@@ -172,6 +184,7 @@ export function EnrichPanel({
                   type="button"
                   onClick={() =>
                     onApply({
+                      fromWeb: true,
                       capabilities: allApplied
                         ? currentCapabilities.filter((t) => !suggested.includes(t))
                         : [...new Set([...currentCapabilities, ...suggested])],

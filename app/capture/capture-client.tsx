@@ -6,6 +6,7 @@ import { resizeForUpload } from "@/lib/image";
 import { CardForm, EMPTY_DRAFT, type CardDraft } from "./card-form";
 import { DuplicateReview, type DuplicateReport } from "./duplicate-review";
 import { EnrichPanel } from "@/components/enrich-panel";
+import { CompanyTagsPanel } from "@/components/company-tags-panel";
 
 type Phase = "pick" | "analyzing" | "review" | "checking" | "duplicate" | "saving";
 
@@ -223,6 +224,15 @@ export function CaptureClient({
         <>
           <CardForm draft={draft} onChange={setDraft} knownTags={knownTags} />
 
+          {/* 이미 등록한 동료가 있으면 웹 검색보다 이쪽이 빠르고 일관된다 */}
+          <CompanyTagsPanel
+            company={draft.company}
+            currentCapabilities={draft.capabilities}
+            onApply={(capabilities) =>
+              setDraft((d) => ({ ...d, capabilities: [...new Set(capabilities)] }))
+            }
+          />
+
           {/* 저장 전에 역량 태그를 채워두면 나중에 질의로 찾을 수 있다.
               나중에 상세 화면에서 다시 할 수도 있지만, 명함을 손에 든 지금
               하는 편이 훨씬 잘 잊지 않는다. */}
@@ -237,7 +247,7 @@ export function CaptureClient({
             currentIndustry={draft.industry}
             currentCapabilities={draft.capabilities}
             onApply={(patch) => {
-              if (patch.capabilities !== undefined) setUsedWebSearch(true);
+              if (patch.fromWeb) setUsedWebSearch(true);
               setDraft((d) => ({
                 ...d,
                 ...(patch.industry !== undefined ? { industry: patch.industry } : {}),

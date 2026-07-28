@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CardForm, EMPTY_DRAFT, type CardDraft } from "@/app/capture/card-form";
 import { EnrichPanel } from "@/components/enrich-panel";
+import { CompanyTagsPanel } from "@/components/company-tags-panel";
 
 interface CardRow extends CardDraft {
   id: string;
@@ -194,7 +195,16 @@ export function CardDetail({
 
       <CardForm draft={draft} onChange={setDraft} knownTags={knownTags} expanded />
 
-      <div className="mt-6">
+      <div className="mt-6 space-y-4">
+        <CompanyTagsPanel
+          company={draft.company}
+          excludeCardId={card.id}
+          currentCapabilities={draft.capabilities}
+          onApply={(capabilities) =>
+            setDraft((d) => ({ ...d, capabilities: [...new Set(capabilities)] }))
+          }
+        />
+
         <EnrichPanel
           subject={{
             company: draft.company,
@@ -206,7 +216,7 @@ export function CardDetail({
           currentIndustry={draft.industry}
           currentCapabilities={draft.capabilities}
           onApply={(patch) => {
-            if (patch.capabilities !== undefined) setUsedWebSearch(true);
+            if (patch.fromWeb) setUsedWebSearch(true);
             setDraft((d) => ({
               ...d,
               ...(patch.industry !== undefined ? { industry: patch.industry } : {}),
