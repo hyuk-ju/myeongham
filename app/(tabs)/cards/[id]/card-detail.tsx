@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CardForm, EMPTY_DRAFT, type CardDraft } from "@/app/capture/card-form";
-import { EnrichPanel } from "./enrich-panel";
+import { EnrichPanel } from "@/components/enrich-panel";
 
 interface CardRow extends CardDraft {
   id: string;
@@ -194,22 +194,29 @@ export function CardDetail({
 
       <CardForm draft={draft} onChange={setDraft} knownTags={knownTags} expanded />
 
-      <EnrichPanel
-        cardId={card.id}
-        company={draft.company}
-        currentIndustry={draft.industry}
-        currentCapabilities={draft.capabilities}
-        onApply={(patch) => {
-          if (patch.capabilities !== undefined) setUsedWebSearch(true);
-          setDraft((d) => ({
-            ...d,
-            ...(patch.industry !== undefined ? { industry: patch.industry } : {}),
-            ...(patch.capabilities !== undefined
-              ? { capabilities: [...new Set(patch.capabilities)] }
-              : {}),
-          }));
-        }}
-      />
+      <div className="mt-6">
+        <EnrichPanel
+          subject={{
+            company: draft.company,
+            company_en: draft.company_en,
+            website: draft.website,
+            address: draft.address,
+            tax_code: draft.tax_code,
+          }}
+          currentIndustry={draft.industry}
+          currentCapabilities={draft.capabilities}
+          onApply={(patch) => {
+            if (patch.capabilities !== undefined) setUsedWebSearch(true);
+            setDraft((d) => ({
+              ...d,
+              ...(patch.industry !== undefined ? { industry: patch.industry } : {}),
+              ...(patch.capabilities !== undefined
+                ? { capabilities: [...new Set(patch.capabilities)] }
+                : {}),
+            }));
+          }}
+        />
+      </div>
 
       {colleagues.length > 0 && (
         <section className="mt-6 space-y-2">

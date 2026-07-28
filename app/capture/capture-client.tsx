@@ -5,6 +5,7 @@ import Link from "next/link";
 import { resizeForUpload } from "@/lib/image";
 import { CardForm, EMPTY_DRAFT, type CardDraft } from "./card-form";
 import { DuplicateReview, type DuplicateReport } from "./duplicate-review";
+import { EnrichPanel } from "@/components/enrich-panel";
 
 type Phase = "pick" | "analyzing" | "review" | "checking" | "duplicate" | "saving";
 
@@ -24,6 +25,8 @@ export function CaptureClient({
   const [error, setError] = useState<string | null>(null);
   const [duplicates, setDuplicates] = useState<DuplicateReport | null>(null);
   const [savedCount, setSavedCount] = useState(0);
+  // 웹 검색으로 담은 태그가 있으면 저장 시 근거를 'web' 으로 남긴다.
+  const [usedWebSearch, setUsedWebSearch] = useState(false);
 
   async function handleFile(file: File) {
     setError(null);
@@ -96,6 +99,7 @@ export function CaptureClient({
         ...draft,
         image_path: imagePath,
         supersedes_id: supersedesId ?? null,
+        ...(usedWebSearch ? { capabilities_source: "web" } : {}),
       }),
     });
 
@@ -117,6 +121,7 @@ export function CaptureClient({
     setDraft(EMPTY_DRAFT);
     setError(null);
     setDuplicates(null);
+    setUsedWebSearch(false);
     if (albumRef.current) albumRef.current.value = "";
     if (cameraRef.current) cameraRef.current.value = "";
   }
@@ -215,7 +220,34 @@ export function CaptureClient({
       )}
 
       {(phase === "review" || phase === "checking" || phase === "saving") && (
-        <CardForm draft={draft} onChange={setDraft} knownTags={knownTags} />
+        <>
+          <CardForm draft={draft} onChange={setDraft} knownTags={knownTags} />
+
+          {/* 저장 전에 역량 태그를 채워두면 나중에 질의로 찾을 수 있다.
+              나중에 상세 화면에서 다시 할 수도 있지만, 명함을 손에 든 지금
+              하는 편이 훨씬 잘 잊지 않는다. */}
+          <EnrichPanel
+            subject={{
+              company: draft.company,
+              company_en: draft.company_en,
+              website: draft.website,
+              address: draft.address,
+              tax_code: draft.tax_code,
+            }}
+            currentIndustry={draft.industry}
+            currentCapabilities={draft.capabilities}
+            onApply={(patch) => {
+              if (patch.capabilities !== undefined) setUsedWebSearch(true);
+              setDraft((d) => ({
+                ...d,
+                ...(patch.industry !== undefined ? { industry: patch.industry } : {}),
+                ...(patch.capabilities !== undefined
+                  ? { capabilities: [...new Set(patch.capabilities)] }
+                  : {}),
+              }));
+            }}
+          />
+        </>
       )}
 
       {/* 앨범 선택용 (capture 속성 제거로 iOS 사진 보관함 지원) */}
