@@ -8,7 +8,13 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
  * 각 지점(requireUser / getAuthorizedUser)에서 다시 한다 — Server Function
  * 호출이 proxy matcher 를 우회할 수 있기 때문이다.
  */
-const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
+const publicRoutes = ["/sign-in(.*)", "/sign-up(.*)"];
+
+// 개발 전용 자동 로그인(/api/dev/login) 은 로그인 전에 열려야 한다.
+// 프로덕션 빌드에서는 아예 목록에 넣지 않는다 — 라우트 자체도 404 를 반환한다.
+if (process.env.NODE_ENV !== "production") publicRoutes.push("/api/dev/(.*)");
+
+const isPublicRoute = createRouteMatcher(publicRoutes);
 
 export default clerkMiddleware(async (auth, request) => {
   if (!isPublicRoute(request)) await auth.protect();
