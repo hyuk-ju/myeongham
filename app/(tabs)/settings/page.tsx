@@ -26,6 +26,10 @@ export default async function SettingsPage() {
     };
   });
 
+  // 작업별 설정을 비워 뒀을 때 실제로 쓰이는 AI — 화면에 이름을 보여준다.
+  const activeProvider = providers.find((p) => p.connected && p.active)?.provider ?? null;
+  const defaultLabel = activeProvider ? MODEL_CATALOG[activeProvider].label : null;
+
   const catalog: CatalogEntry[] = PROVIDERS.map((provider) => ({
     provider,
     label: MODEL_CATALOG[provider].label,
@@ -44,9 +48,12 @@ export default async function SettingsPage() {
           <div>
             <h2 className="font-semibold">AI 분석 연결</h2>
             <p className="mt-1 text-sm text-soft">
-              명함 이미지를 읽어 정보를 추출하고, 질문에 답하는 데 사용됩니다.
-              구독으로 처리되어 API 요금이 따로 나가지 않습니다. 둘 다 연결해 두고
-              한도에 걸리면 전환할 수 있습니다.
+              명함 이미지를 읽고, 질문에 답하고, 회사 정보를 웹에서 찾는 데 씁니다.
+              구독으로 처리되어 API 요금이 따로 나가지 않습니다. 둘 다 연결해 두면
+              한도에 걸렸을 때 옮겨서 계속 쓸 수 있습니다.
+              <br />
+              <strong className="font-semibold text-foreground">기본 AI</strong> 는 아래
+              작업별 설정을 비워 뒀을 때 쓰이는 AI 입니다.
             </p>
           </div>
           <ConnectAI providers={providers} />
@@ -56,11 +63,12 @@ export default async function SettingsPage() {
           <div>
             <h2 className="font-semibold">작업별 모델</h2>
             <p className="mt-1 text-sm text-soft">
-              명함 인식과 질문 답변에 서로 다른 AI·모델을 쓸 수 있습니다.
-              비워 두면 위에서 &ldquo;사용 중&rdquo;인 AI의 기본 모델을 씁니다.
+              작업마다 다른 AI 를 쓸 수 있습니다 — 예를 들어 명함 인식은 ChatGPT,
+              질문 답변은 Claude 로 나눠 둘 수 있습니다. 비워 두면 위에서 정한
+              기본 AI 를 씁니다.
             </p>
           </div>
-          <ModelPicker catalog={catalog} initial={aiSettings} />
+          <ModelPicker catalog={catalog} initial={aiSettings} defaultLabel={defaultLabel} />
         </section>
 
         <section className="space-y-3 rounded-2xl border border-line bg-surface p-5 shadow-sm">

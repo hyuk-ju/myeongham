@@ -7,12 +7,12 @@
  *
  * 자동 저장하지 않는다 — 웹 검색은 동명이인/동명회사로 오답이 날 수 있어
  * 반드시 사용자가 보고 승인한 뒤 저장한다 (capabilities_source='web').
+ *
+ * Claude·Codex 둘 다 웹 검색 서버 도구를 지원한다. 어느 쪽을 쓸지는 설정의
+ * '회사 정보 검색' 항목이 정하고, 실제 분기는 llm.ts 의 webSearch 가 맡는다.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getValidToken } from "@/lib/ai/token-store";
-import { getAISettings } from "@/lib/ai/settings-store";
-import { claudeWebSearch, CLAUDE_MODEL } from "@/lib/ai/claude";
-import { parseJsonObject } from "@/lib/ai/codex";
+import { webSearch, parseJsonObject } from "@/lib/ai/llm";
 
 export interface EnrichSuggestion {
   industry: string | null;
@@ -30,6 +30,8 @@ const INSTRUCTIONS = `당신은 기업 정보 조사원입니다. 주어진 회�
 - 공식 홈페이지, 기업정보 사이트, 채용 공고, 뉴스 순으로 신뢰하세요.
 
 출력은 JSON 객체 하나만. 코드펜스·설명 금지.
+**본문에 출처 링크나 각주를 넣지 마세요** — 출처는 별도로 수집합니다.
+"([도메인](주소))" 같은 인용 표기가 섞이면 JSON 파싱이 깨집니다.
 스키마: {"industry":string|null,"capabilities":string[],"summary":string|null,"confident":boolean}
 
 - industry: 업종을 한국어 명사구로 (예: "PCB 제조", "산업용 밸브 유통"). 못 찾으면 null.
@@ -112,20 +114,6 @@ export async function enrichCompany(
   ownerId: string,
   input: EnrichInput,
 ): Promise<EnrichSuggestion> {
-  // 웹 검색은 Claude 서버 도구를 쓴다. Codex 백엔드에는 대응 표면이 없다.
-  const settings = await getAISettings(supabase, ownerId);
-  const token = await getValidToken(supabase, ownerId, "anthropic-claude");
-  if (token.provider !== "anthropic-claude") {
-    throw new Error(
-      "웹 검색 보강은 Claude 연결이 필요합니다. 설정에서 Claude를 연결하세요.",
-    );
-  }
-
-  const model =
-    settings.ask.provider === "anthropic-claude" && settings.ask.model
-      ? settings.ask.model
-      : CLAUDE_MODEL;
-
   const hints = [
     `회사명: ${input.company}`,
     input.companyEn && input.companyEn !== input.company
@@ -138,11 +126,13 @@ export async function enrichCompany(
     .filter(Boolean)
     .join("\n");
 
-  const { text, sources, searched, searchError } = await claudeWebSearch(
-    token,
+  // 어느 AI 로 검색할지는 설정의 '회사 정보 검색' 항목이 정한다 (llm.ts).
+  const { text, sources, searched, searchError } = await webSearch(
+    supabase,
+    ownerId,
+    "enrich",
     INSTRUCTIONS,
     `다음 회사를 조사해 주세요.\n\n${hints}`,
-    model,
   );
 
   // 검색이 아예 안 됐으면 모델이 기억으로 답한 것이므로 결과를 쓰면 안 된다.

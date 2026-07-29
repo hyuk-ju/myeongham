@@ -26,10 +26,15 @@ export async function POST(request: NextRequest) {
   const auth = await getAuthorizedUser();
   if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const body = (await request.json()) as { extract?: unknown; ask?: unknown };
+  const body = (await request.json()) as {
+    extract?: unknown;
+    ask?: unknown;
+    enrich?: unknown;
+  };
   const settings: AISettings = {
     extract: parseTaskConfig(body.extract),
     ask: parseTaskConfig(body.ask),
+    enrich: parseTaskConfig(body.enrich),
   };
 
   try {

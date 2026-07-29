@@ -7,8 +7,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getValidToken, type AIProvider } from "@/lib/ai/token-store";
 import { getAISettings, type AITask } from "@/lib/ai/settings-store";
-import { codexRequest, CODEX_MODEL, type AIContent } from "@/lib/ai/codex";
-import { claudeRequest, CLAUDE_MODEL } from "@/lib/ai/claude";
+import {
+  codexRequest,
+  codexWebSearch,
+  CODEX_MODEL,
+  type AIContent,
+  type WebSearchOutcome,
+} from "@/lib/ai/codex";
+import { claudeRequest, claudeWebSearch, CLAUDE_MODEL } from "@/lib/ai/claude";
 
 export type { AIContent };
 export { parseJsonObject } from "@/lib/ai/codex";
@@ -61,4 +67,35 @@ export async function callAI(
   return token.provider === "anthropic-claude"
     ? claudeRequest(token, instructions, content, model)
     : codexRequest(token, instructions, content, model);
+}
+
+/**
+ * 웹 검색을 붙여 호출한다 (회사 정보 보강용).
+ *
+ * Claude 와 Codex 둘 다 서버측 웹 검색 도구를 지원한다. 어느 쪽을 쓸지는
+ * callAI 와 똑같이 작업별 설정 → 기본 AI 순으로 정해지므로, 한쪽이 사용량
+ * 한도에 걸리면 설정에서 반대쪽으로 넘겨 계속 쓸 수 있다.
+ */
+export async function webSearch(
+  supabase: SupabaseClient,
+  ownerId: string,
+  task: AITask,
+  instructions: string,
+  prompt: string,
+): Promise<WebSearchOutcome & { provider: AIProvider }> {
+  const settings = await getAISettings(supabase, ownerId);
+  const config = settings[task];
+
+  const token = await getValidToken(supabase, ownerId, config.provider ?? undefined);
+  const model =
+    config.provider === token.provider && config.model
+      ? config.model
+      : defaultModelFor(token.provider);
+
+  const outcome =
+    token.provider === "anthropic-claude"
+      ? await claudeWebSearch(token, instructions, prompt, model)
+      : await codexWebSearch(token, instructions, prompt, model);
+
+  return { ...outcome, provider: token.provider };
 }

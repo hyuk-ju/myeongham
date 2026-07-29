@@ -6,17 +6,13 @@ import { CaptureClient } from "./capture-client";
 export default async function CapturePage() {
   const { user, supabase } = await requireUser();
 
-  const [token, tagsResult] = await Promise.all([
-    getActiveTokenRow(supabase, user.id),
-    supabase.rpc("my_capability_tags"),
-  ]);
-
-  const knownTags = ((tagsResult.data ?? []) as { tag: string }[]).map((r) => r.tag);
+  // 검토는 /capture/review 로 옮겨졌다. 이 화면은 사진을 담기만 한다.
+  const token = await getActiveTokenRow(supabase, user.id);
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-5">
       <header className="mb-5 flex items-center justify-between">
-        <h1 className="text-lg font-bold tracking-tight">명함 등록</h1>
+        <h1 className="text-lg font-bold tracking-tight">명함 담기</h1>
         <Link
           href="/"
           aria-label="닫기"
@@ -26,7 +22,7 @@ export default async function CapturePage() {
         </Link>
       </header>
 
-      <CaptureClient connected={!!token} knownTags={knownTags} />
+      <CaptureClient connected={!!token} />
     </main>
   );
 }

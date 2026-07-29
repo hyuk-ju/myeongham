@@ -39,7 +39,10 @@ export async function POST(request: NextRequest) {
   row.capabilities = Array.isArray(body.capabilities)
     ? [...new Set(body.capabilities.filter((t): t is string => typeof t === "string" && !!t.trim()).map((t) => t.trim()))]
     : [];
-  row.capabilities_source = row.capabilities && (row.capabilities as string[]).length ? "manual" : null;
+  // 근거는 호출부가 알려준다 — 웹 검색으로 담았으면 'web', 아니면 직접 고른 것.
+  // (예전에는 body 를 무시하고 항상 'manual' 로 덮어써서 근거가 틀렸다)
+  const source = body.capabilities_source === "web" ? "web" : "manual";
+  row.capabilities_source = (row.capabilities as string[]).length ? source : null;
 
   const conf = Number(body.confidence);
   row.confidence = Number.isFinite(conf) ? Math.min(1, Math.max(0, conf)) : null;

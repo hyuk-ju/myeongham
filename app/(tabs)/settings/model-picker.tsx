@@ -32,14 +32,24 @@ const TASKS = [
     title: "질문 답변",
     hint: "물어보기 화면에서 명함을 찾아 정리하는 작업",
   },
+  {
+    key: "enrich" as const,
+    title: "회사 정보 검색",
+    hint: "회사명으로 웹을 뒤져 역량 태그를 제안하는 작업",
+  },
 ];
+
+type TaskKey = (typeof TASKS)[number]["key"];
 
 export function ModelPicker({
   catalog,
   initial,
+  defaultLabel,
 }: {
   catalog: CatalogEntry[];
-  initial: { extract: TaskConfig; ask: TaskConfig };
+  initial: Record<TaskKey, TaskConfig>;
+  /** 비워 뒀을 때 실제로 쓰이는 AI 이름 — 무엇이 쓰이는지 보이게 한다 */
+  defaultLabel: string | null;
 }) {
   const router = useRouter();
   const [config, setConfig] = useState(initial);
@@ -49,7 +59,7 @@ export function ModelPicker({
   const dirty = JSON.stringify(config) !== JSON.stringify(initial);
   const connected = catalog.filter((c) => c.connected);
 
-  function setTask(task: "extract" | "ask", next: TaskConfig) {
+  function setTask(task: TaskKey, next: TaskConfig) {
     setConfig((c) => ({ ...c, [task]: next }));
     setMessage(null);
   }
@@ -103,7 +113,9 @@ export function ModelPicker({
                   }}
                   className="rounded-lg border border-line bg-surface px-3 py-2 text-[16px] outline-none focus:border-brand"
                 >
-                  <option value="">자동 (사용 중인 AI)</option>
+                  <option value="">
+                    {defaultLabel ? `기본 AI (${defaultLabel})` : "기본 AI"}
+                  </option>
                   {connected.map((c) => (
                     <option key={c.provider} value={c.provider}>
                       {c.label}

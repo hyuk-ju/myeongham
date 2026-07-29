@@ -142,7 +142,7 @@ function ProviderCard({ state }: { state: ProviderState }) {
           <span className="font-semibold">{meta.label}</span>
           {state.active && (
             <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand">
-              사용 중
+              기본 AI
             </span>
           )}
         </div>
@@ -185,7 +185,7 @@ function ProviderCard({ state }: { state: ProviderState }) {
               disabled={switching}
               className="rounded-xl bg-brand px-3.5 py-2 text-sm font-semibold text-brand-ink disabled:opacity-50"
             >
-              {switching ? "전환 중…" : "이걸로 사용"}
+              {switching ? "전환 중…" : "기본 AI 로 지정"}
             </button>
           )}
           {state.connected && (

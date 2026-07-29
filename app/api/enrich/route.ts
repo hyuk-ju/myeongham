@@ -2,7 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAuthorizedUser } from "@/lib/auth";
 import { enrichCompany } from "@/lib/ai/enrich";
 
-export const maxDuration = 120;
+// 회사를 특정하지 못하면 모델이 검색을 반복해 2분을 넘기는 경우가 있다 (실측).
+// Vercel 상한(300초)까지 열어둔다 — 중간에 끊기면 결과가 통째로 날아간다.
+export const maxDuration = 300;
 
 /**
  * 회사명을 웹에서 조사해 업종·역량 태그 후보를 돌려준다.

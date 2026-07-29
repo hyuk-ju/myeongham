@@ -7,7 +7,7 @@
  *   - system 첫 블록이 Claude Code 식별 문구
  */
 import type { ActiveToken } from "@/lib/ai/token-store";
-import type { AIContent } from "@/lib/ai/codex";
+import type { AIContent, WebSearchOutcome } from "@/lib/ai/codex";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 export const CLAUDE_MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-5";
@@ -89,15 +89,9 @@ export async function claudeRequest(
   return textOf(json);
 }
 
-export interface WebSearchOutcome {
-  text: string;
-  /** 검색으로 실제 방문한 출처 URL */
-  sources: string[];
-  /** 검색이 한 번이라도 성공했는지 — false 면 결과를 신뢰하면 안 된다 */
-  searched: boolean;
-  /** 검색 도구가 돌려준 오류 코드 (있다면) */
-  searchError: string | null;
-}
+// WebSearchOutcome 은 Codex 쪽과 같은 모양이라 codex.ts 에 두고 함께 쓴다
+// (AIContent 도 같은 이유로 그쪽에 있다).
+export type { WebSearchOutcome } from "@/lib/ai/codex";
 
 /**
  * 웹 검색 서버 도구를 붙여 호출한다 (회사 정보 보강용).

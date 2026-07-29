@@ -1,130 +1,28 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import Link from "next/link";
-import { resizeForUpload } from "@/lib/image";
-import { CardForm, EMPTY_DRAFT, type CardDraft } from "./card-form";
-import { DuplicateReview, type DuplicateReport } from "./duplicate-review";
-import { EnrichPanel } from "@/components/enrich-panel";
-import { CompanyTagsPanel } from "@/components/company-tags-panel";
+import { useDraftQueue } from "@/lib/use-draft-queue";
 
-type Phase = "pick" | "analyzing" | "review" | "checking" | "duplicate" | "saving";
-
-export function CaptureClient({
-  connected,
-  knownTags,
-}: {
-  connected: boolean;
-  knownTags: string[];
-}) {
+/**
+ * 명함 담기 — 촬영·분석·검토를 분리한 대기열 화면.
+ *
+ * 예전에는 한 장 찍을 때마다 AI 분석 10~30초를 화면 앞에서 기다려야 했다.
+ * 지금은 사진만 담고 곧바로 다음 장을 찍을 수 있고, 분석은 뒤에서 한 장씩
+ * 돌아간다. 검토는 다 담은 뒤 /capture/review 에서 몰아서 한다.
+ */
+export function CaptureClient({ connected }: { connected: boolean }) {
   const albumRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
-  const [phase, setPhase] = useState<Phase>("pick");
-  const [preview, setPreview] = useState<string | null>(null);
-  const [imagePath, setImagePath] = useState<string | null>(null);
-  const [draft, setDraft] = useState<CardDraft>(EMPTY_DRAFT);
-  const [error, setError] = useState<string | null>(null);
-  const [duplicates, setDuplicates] = useState<DuplicateReport | null>(null);
-  const [savedCount, setSavedCount] = useState(0);
-  // 웹 검색으로 담은 태그가 있으면 저장 시 근거를 'web' 으로 남긴다.
-  const [usedWebSearch, setUsedWebSearch] = useState(false);
+  const queue = useDraftQueue();
 
-  async function handleFile(file: File) {
-    setError(null);
-    setDuplicates(null);
-    setPreview(URL.createObjectURL(file));
-    setPhase("analyzing");
+  const { drafts, analyzingId, enrichingCompany, uploading, loading, stopped, error } = queue;
+  const ready = drafts.filter((d) => d.status === "extracted");
+  const pending = drafts.filter((d) => d.status === "pending");
+  const failed = drafts.filter((d) => d.status === "failed");
 
-    try {
-      const resized = await resizeForUpload(file);
-      const form = new FormData();
-      form.append("image", resized);
-
-      const res = await fetch("/api/extract", { method: "POST", body: form });
-      const json = await res.json();
-
-      if (json.imagePath) setImagePath(json.imagePath);
-
-      if (!res.ok) {
-        // 이미지는 저장됐으므로 수동 입력으로 넘어갈 수 있다.
-        setError(`${json.error} — 아래에서 직접 입력할 수 있습니다.`);
-        setDraft(EMPTY_DRAFT);
-        setPhase("review");
-        return;
-      }
-
-      setDraft({ ...EMPTY_DRAFT, ...json.card });
-      setPhase("review");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "업로드에 실패했습니다.");
-      setPhase("pick");
-    }
-  }
-
-  /** 저장 버튼 → 먼저 중복 후보를 조회하고, 있으면 사용자에게 판단을 넘긴다. */
-  async function requestSave() {
-    if (!imagePath) return;
-    setPhase("checking");
-    setError(null);
-
-    try {
-      const res = await fetch("/api/cards/duplicates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draft),
-      });
-      if (res.ok) {
-        const report = (await res.json()) as DuplicateReport;
-        if (report.samePerson.length || report.sameCompany.length) {
-          setDuplicates(report);
-          setPhase("duplicate");
-          return;
-        }
-      }
-      // 중복 조회가 실패해도 저장 자체를 막지는 않는다.
-    } catch {
-      // 네트워크 오류 — 그대로 저장으로 진행
-    }
-    await save();
-  }
-
-  async function save(supersedesId?: string) {
-    if (!imagePath) return;
-    setPhase("saving");
-    setError(null);
-
-    const res = await fetch("/api/cards", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...draft,
-        image_path: imagePath,
-        supersedes_id: supersedesId ?? null,
-        ...(usedWebSearch ? { capabilities_source: "web" } : {}),
-      }),
-    });
-
-    if (!res.ok) {
-      const json = await res.json().catch(() => ({}));
-      setError(json.error ?? "저장에 실패했습니다.");
-      setPhase("review");
-      return;
-    }
-
-    setSavedCount((n) => n + 1);
-    reset();
-  }
-
-  function reset() {
-    setPhase("pick");
-    setPreview(null);
-    setImagePath(null);
-    setDraft(EMPTY_DRAFT);
-    setError(null);
-    setDuplicates(null);
-    setUsedWebSearch(false);
-    if (albumRef.current) albumRef.current.value = "";
-    if (cameraRef.current) cameraRef.current.value = "";
+  function pick(input: HTMLInputElement | null) {
+    input?.click();
   }
 
   if (!connected) {
@@ -145,33 +43,27 @@ export function CaptureClient({
 
   return (
     <div className="space-y-5 pb-32">
-      {savedCount > 0 && phase === "pick" && (
-        <p className="rounded-xl bg-ok-soft px-3.5 py-2.5 text-sm text-ok">
-          이번 세션에서 {savedCount}장 저장했습니다. 계속 찍으세요.
-        </p>
-      )}
-
       {error && (
         <p className="rounded-xl bg-danger-soft px-3.5 py-2.5 text-sm text-danger">{error}</p>
       )}
 
-      {phase === "duplicate" && duplicates && (
-        <DuplicateReview
-          report={duplicates}
-          busy={false}
-          onReplace={(id) => save(id)}
-          onSaveNew={() => save()}
-          onCancel={() => {
-            setDuplicates(null);
-            setPhase("review");
-          }}
-        />
+      {stopped && (
+        <div className="space-y-2.5 rounded-xl bg-warn-soft px-3.5 py-3">
+          <p className="text-sm text-warn">{stopped}</p>
+          <button
+            type="button"
+            onClick={queue.retryFailed}
+            className="rounded-lg bg-warn/15 px-3 py-1.5 text-xs font-semibold text-warn"
+          >
+            다시 시도
+          </button>
+        </div>
       )}
 
-      {phase === "pick" && !preview && (
+      {drafts.length === 0 && !uploading && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
-            onClick={() => cameraRef.current?.click()}
+            onClick={() => pick(cameraRef.current)}
             className="flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-brand/40 bg-brand-soft/30 px-6 py-10 text-center transition active:scale-[0.98]"
           >
             <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand text-brand-ink">
@@ -181,11 +73,11 @@ export function CaptureClient({
               </svg>
             </span>
             <span className="font-semibold text-foreground">명함 촬영하기</span>
-            <span className="text-[13px] text-soft">카메라로 바로 촬영</span>
+            <span className="text-[13px] text-soft">찍고 바로 다음 장</span>
           </button>
 
           <button
-            onClick={() => albumRef.current?.click()}
+            onClick={() => pick(albumRef.current)}
             className="flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-line-strong bg-surface/60 px-6 py-10 text-center transition active:scale-[0.98]"
           >
             <span className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-hover text-foreground">
@@ -196,83 +88,110 @@ export function CaptureClient({
               </svg>
             </span>
             <span className="font-semibold text-foreground">앨범에서 선택하기</span>
-            <span className="text-[13px] text-soft">저장된 명함 사진 선택</span>
+            <span className="text-[13px] text-soft">여러 장 한 번에</span>
           </button>
         </div>
       )}
 
-      {preview && (
-        // 로컬 blob 미리보기 — next/image 최적화 대상이 아니라 img 를 쓴다.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={preview}
-          alt="촬영한 명함"
-          className="w-full rounded-2xl border border-line bg-surface object-contain shadow-sm"
-        />
+      {loading && drafts.length === 0 && (
+        <p className="text-sm text-soft">대기열을 불러오는 중…</p>
       )}
 
-      {phase === "analyzing" && (
-        <div className="rounded-2xl border border-line bg-surface px-4 py-4 shadow-sm">
-          <p className="flex items-center gap-2.5 text-sm text-soft">
-            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand border-t-transparent" />
-            명함을 읽는 중… 10~30초 정도 걸립니다
-          </p>
-        </div>
+      {(drafts.length > 0 || uploading > 0) && (
+        <section className="space-y-3 rounded-2xl border border-line bg-surface p-4 shadow-sm">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <span className="font-semibold">{drafts.length}장 담김</span>
+            {uploading > 0 && <span className="text-soft">· 올리는 중 {uploading}</span>}
+            {ready.length > 0 && <span className="text-ok">· 분석 완료 {ready.length}</span>}
+            {pending.length > 0 && <span className="text-soft">· 대기 {pending.length}</span>}
+            {failed.length > 0 && <span className="text-danger">· 실패 {failed.length}</span>}
+          </div>
+
+          {pending.length > 0 && !stopped && (
+            <p className="flex items-center gap-2 text-xs text-soft">
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+              뒤에서 한 장씩 읽는 중입니다. 계속 찍으셔도 됩니다.
+            </p>
+          )}
+
+          {/* 명함을 다 읽은 뒤 회사 정보를 회사 단위로 한 번씩 찾아둔다.
+              검토 화면에서 20~40초를 기다리지 않게 하려는 것이다. */}
+          {enrichingCompany && !stopped && (
+            <p className="flex items-center gap-2 text-xs text-soft">
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+              {enrichingCompany} — 웹에서 회사 정보를 찾는 중
+            </p>
+          )}
+
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {drafts.map((d) => (
+              <div key={d.id} className="relative overflow-hidden rounded-xl border border-line bg-paper">
+                {d.image_url ? (
+                  // Storage 서명 URL — next/image 최적화 대상이 아니다.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={d.image_url} alt="" className="h-24 w-full object-cover" />
+                ) : (
+                  <div className="h-24 w-full" />
+                )}
+
+                <span
+                  className={`absolute left-1 top-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                    d.status === "extracted"
+                      ? "bg-ok-soft text-ok"
+                      : d.status === "failed"
+                        ? "bg-danger-soft text-danger"
+                        : "bg-surface/90 text-soft"
+                  }`}
+                >
+                  {d.status === "extracted"
+                    ? "완료"
+                    : d.status === "failed"
+                      ? "실패"
+                      : d.id === analyzingId
+                        ? "읽는 중"
+                        : "대기"}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => queue.discard(d.id)}
+                  aria-label="이 사진 버리기"
+                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md bg-surface/90 text-xs text-soft"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {failed.length > 0 && !stopped && (
+            <button
+              type="button"
+              onClick={queue.retryFailed}
+              className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-soft"
+            >
+              실패한 {failed.length}장 다시 시도
+            </button>
+          )}
+        </section>
       )}
 
-      {(phase === "review" || phase === "checking" || phase === "saving") && (
-        <>
-          <CardForm draft={draft} onChange={setDraft} knownTags={knownTags} />
-
-          {/* 이미 등록한 동료가 있으면 웹 검색보다 이쪽이 빠르고 일관된다 */}
-          <CompanyTagsPanel
-            company={draft.company}
-            currentCapabilities={draft.capabilities}
-            onApply={(capabilities) =>
-              setDraft((d) => ({ ...d, capabilities: [...new Set(capabilities)] }))
-            }
-          />
-
-          {/* 저장 전에 역량 태그를 채워두면 나중에 질의로 찾을 수 있다.
-              나중에 상세 화면에서 다시 할 수도 있지만, 명함을 손에 든 지금
-              하는 편이 훨씬 잘 잊지 않는다. */}
-          <EnrichPanel
-            subject={{
-              company: draft.company,
-              company_en: draft.company_en,
-              website: draft.website,
-              address: draft.address,
-              tax_code: draft.tax_code,
-            }}
-            currentIndustry={draft.industry}
-            currentCapabilities={draft.capabilities}
-            onApply={(patch) => {
-              if (patch.fromWeb) setUsedWebSearch(true);
-              setDraft((d) => ({
-                ...d,
-                ...(patch.industry !== undefined ? { industry: patch.industry } : {}),
-                ...(patch.capabilities !== undefined
-                  ? { capabilities: [...new Set(patch.capabilities)] }
-                  : {}),
-              }));
-            }}
-          />
-        </>
-      )}
-
-      {/* 앨범 선택용 (capture 속성 제거로 iOS 사진 보관함 지원) */}
+      {/* 앨범 선택용 — multiple 로 여러 장을 한 번에 담는다.
+          (capture 속성을 빼야 iOS 사진 보관함이 열린다) */}
       <input
         ref={albumRef}
         type="file"
+        multiple
         accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*"
         className="hidden"
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleFile(file);
+          const files = Array.from(e.target.files ?? []);
+          e.target.value = "";
+          void queue.add(files);
         }}
       />
 
-      {/* 카메라 직접 촬영용 (capture="environment") */}
+      {/* 카메라 직접 촬영용 — 한 번에 한 장이지만 기다림이 없어 연달아 찍을 수 있다 */}
       <input
         ref={cameraRef}
         type="file"
@@ -280,65 +199,36 @@ export function CaptureClient({
         capture="environment"
         className="hidden"
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleFile(file);
+          const files = Array.from(e.target.files ?? []);
+          e.target.value = "";
+          void queue.add(files);
         }}
       />
 
-      {/* 한 손 조작을 위해 주요 버튼을 화면 하단에 고정.
-          중복 확인 중에는 그 카드 안의 버튼으로 결정하므로 숨긴다. */}
-      <div
-        className={`fixed inset-x-0 bottom-0 z-50 border-t border-line bg-surface/95 p-4 backdrop-blur pb-safe ${
-          phase === "duplicate" ? "hidden" : ""
-        }`}
-      >
-        <div className="mx-auto flex max-w-2xl gap-2 pb-3">
-          {phase === "pick" && (
-            <>
-              <button
-                onClick={() => cameraRef.current?.click()}
-                className="flex-1 rounded-xl bg-brand px-3 py-3.5 text-sm font-semibold text-brand-ink"
-              >
-                📷 카메라 촬영
-              </button>
-              <button
-                onClick={() => albumRef.current?.click()}
-                className="flex-1 rounded-xl border border-line bg-surface px-3 py-3.5 text-sm font-semibold text-foreground"
-              >
-                🖼️ 앨범에서 선택
-              </button>
-            </>
-          )}
-
-          {phase === "analyzing" && (
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-surface/95 p-4 backdrop-blur pb-safe">
+        <div className="mx-auto flex max-w-2xl flex-col gap-2 pb-3">
+          <div className="flex gap-2">
             <button
-              onClick={reset}
-              className="flex-1 rounded-xl border border-line bg-surface px-4 py-3.5 text-sm font-medium"
+              onClick={() => pick(cameraRef.current)}
+              className="flex-1 rounded-xl bg-brand px-3 py-3.5 text-sm font-semibold text-brand-ink"
             >
-              취소
+              📷 카메라 촬영
             </button>
-          )}
+            <button
+              onClick={() => pick(albumRef.current)}
+              className="flex-1 rounded-xl border border-line bg-surface px-3 py-3.5 text-sm font-semibold text-foreground"
+            >
+              🖼️ 앨범에서 선택
+            </button>
+          </div>
 
-          {(phase === "review" || phase === "checking" || phase === "saving") && (
-            <>
-              <button
-                onClick={reset}
-                className="rounded-xl border border-line bg-surface px-4 py-3.5 text-sm font-medium"
-              >
-                버리기
-              </button>
-              <button
-                onClick={requestSave}
-                disabled={phase !== "review"}
-                className="flex-1 rounded-xl bg-brand px-4 py-3.5 text-sm font-semibold text-brand-ink disabled:opacity-60"
-              >
-                {phase === "checking"
-                  ? "중복 확인 중…"
-                  : phase === "saving"
-                    ? "저장 중…"
-                    : "저장하고 다음 장"}
-              </button>
-            </>
+          {ready.length > 0 && (
+            <Link
+              href="/capture/review"
+              className="rounded-xl bg-ok px-4 py-3.5 text-center text-sm font-semibold text-brand-ink"
+            >
+              검토 시작 ({ready.length}장)
+            </Link>
           )}
         </div>
       </div>

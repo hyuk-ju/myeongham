@@ -34,8 +34,14 @@ export function EnrichPanel({
   currentIndustry,
   currentCapabilities,
   onApply,
+  initial = null,
 }: {
   subject: EnrichSubject;
+  /**
+   * 대기열에서 미리 받아둔 제안. 있으면 검색 버튼을 누르지 않아도 바로 보인다.
+   * 자동으로 담지는 않는다 — 고르는 건 항상 사용자다.
+   */
+  initial?: EnrichSuggestion | null;
   currentIndustry: string | null;
   currentCapabilities: string[];
   /**
@@ -53,7 +59,7 @@ export function EnrichPanel({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<EnrichSuggestion | null>(null);
+  const [result, setResult] = useState<EnrichSuggestion | null>(initial);
   const [autoApplied, setAutoApplied] = useState(0);
 
   async function search() {

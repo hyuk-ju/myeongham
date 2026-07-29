@@ -6,7 +6,7 @@ export default async function HomePage() {
   const { user, supabase } = await requireUser();
 
   // 교체된 지난 명함은 통계·목록에서 제외한다.
-  const [totalResult, untaggedResult, token, recentResult] = await Promise.all([
+  const [totalResult, untaggedResult, token, recentResult, draftResult] = await Promise.all([
     supabase.from("cards").select("id", { count: "exact", head: true }).eq("is_current", true),
     supabase
       .from("cards")
@@ -20,11 +20,18 @@ export default async function HomePage() {
       .eq("is_current", true)
       .order("created_at", { ascending: false })
       .limit(5),
+    // 담아만 두고 확인을 잊는 것을 막는다. card_drafts 는 cards 와 별개 테이블이라
+    // 위 통계·목록에는 애초에 섞이지 않는다.
+    supabase
+      .from("card_drafts")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "extracted"),
   ]);
 
   const total = totalResult.count ?? 0;
   const untagged = untaggedResult.count ?? 0;
   const recent = recentResult.data ?? [];
+  const waitingReview = draftResult.count ?? 0;
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 pt-8">
@@ -55,6 +62,16 @@ export default async function HomePage() {
         </Link>
       )}
 
+      {waitingReview > 0 && (
+        <Link
+          href="/capture/review"
+          className="mb-5 block rounded-2xl border border-ok/25 bg-ok-soft px-4 py-3.5 text-sm text-ok"
+        >
+          <span className="font-semibold">확인 대기 {waitingReview}장</span> — 분석이 끝났습니다.
+          확인하고 저장하세요 →
+        </Link>
+      )}
+
       <div className="mb-5 grid grid-cols-2 gap-3">
         <Link
           href="/cards"
@@ -73,6 +90,17 @@ export default async function HomePage() {
           <div className="mt-0.5 text-[13px] text-soft">역량 태그 없음</div>
         </Link>
       </div>
+
+      {/* 태그가 없으면 질문에 안 걸린다 — 회사 단위로 한 번에 채울 수 있게 안내한다 */}
+      {untagged > 0 && (
+        <Link
+          href="/enrich"
+          className="mb-5 block rounded-2xl border border-warn/25 bg-warn-soft px-4 py-3.5 text-sm text-warn"
+        >
+          <span className="font-semibold">역량 태그 {untagged}장 비어 있음</span> — 웹에서
+          회사별로 한 번에 채우기 →
+        </Link>
+      )}
 
       <Link
         href="/ask"
