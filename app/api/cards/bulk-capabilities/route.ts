@@ -1,5 +1,11 @@
-import { NextResponse, type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { getAuthorizedUser } from "@/lib/auth";
+import {
+  errorResponse,
+  jsonResponse,
+  parseBulkCapabilitiesRequest,
+  parseBulkCapabilitiesResult,
+} from "@/lib/http-contracts";
 
 /**
  * 고른 역량 태그를 그 회사 명함 **전체**에 적용한다.
@@ -9,36 +15,20 @@ import { getAuthorizedUser } from "@/lib/auth";
  */
 export async function POST(request: NextRequest) {
   const auth = await getAuthorizedUser();
-  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!auth) return errorResponse("unauthorized");
   const { supabase } = auth;
 
-  const body = (await request.json()) as Record<string, unknown>;
-  const company = typeof body.company === "string" ? body.company.trim() : "";
-  if (!company) return NextResponse.json({ error: "회사명이 없습니다." }, { status: 400 });
-
-  const capabilities = Array.isArray(body.capabilities)
-    ? [
-        ...new Set(
-          body.capabilities
-            .filter((t): t is string => typeof t === "string" && !!t.trim())
-            .map((t) => t.trim()),
-        ),
-      ]
-    : [];
-  if (!capabilities.length) {
-    return NextResponse.json({ error: "적용할 태그가 없습니다." }, { status: 400 });
-  }
-
-  const industry = typeof body.industry === "string" && body.industry.trim()
-    ? body.industry.trim()
-    : null;
+  const body = await parseBulkCapabilitiesRequest(request);
+  if (!body.ok) return errorResponse(body.code);
 
   const { data, error } = await supabase.rpc("apply_company_capabilities", {
-    p_company: company,
-    p_capabilities: capabilities,
-    p_industry: industry,
+    p_company: body.value.company,
+    p_capabilities: body.value.capabilities,
+    p_industry: body.value.industry,
   });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return errorResponse("invalid_response");
 
-  return NextResponse.json({ updated: (data as number) ?? 0 });
+  const updated = parseBulkCapabilitiesResult(data);
+  if (!updated.ok) return errorResponse(updated.code);
+  return jsonResponse({ updated: updated.value });
 }

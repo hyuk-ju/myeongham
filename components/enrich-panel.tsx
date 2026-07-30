@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronDown, ExternalLink, Search } from "lucide-react";
+import { Action, Chip } from "@/components/ui";
 
 export interface EnrichSuggestion {
-  industry: string | null;
-  capabilities: string[];
-  summary: string | null;
-  confident: boolean;
-  sources: string[];
+  readonly industry: string | null;
+  readonly capabilities: readonly string[];
+  readonly summary: string | null;
+  readonly confident: boolean;
+  readonly sources: readonly { readonly url: string; readonly title: string }[];
 }
 
 export interface EnrichSubject {
@@ -18,6 +20,34 @@ export interface EnrichSubject {
   tax_code: string | null;
 }
 
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseSuggestion(value: unknown): EnrichSuggestion | null {
+  if (!isRecord(value)) return null;
+  const capabilities = value.capabilities;
+  const sources = value.sources;
+  if (
+    !(typeof value.industry === "string" || value.industry === null) || !(typeof value.summary === "string" || value.summary === null) ||
+    typeof value.confident !== "boolean" ||
+    !Array.isArray(capabilities) ||
+    !capabilities.every((tag): tag is string => typeof tag === "string") ||
+    !Array.isArray(sources) ||
+    !sources.every((source) => isRecord(source) && typeof source.url === "string" && typeof source.title === "string")
+  ) return null;
+  return {
+    industry: value.industry,
+    capabilities,
+    summary: value.summary, confident: value.confident,
+    sources: sources.map((source) => ({ url: source.url, title: source.title })),
+  };
+}
+
+function responseError(value: unknown): string {
+  return isRecord(value) && typeof value.code === "string" ? value.code : "upstream_failure";
+}
+
 /**
  * 회사명을 웹에서 조사해 업종·역량 태그를 제안한다.
  *
@@ -25,9 +55,8 @@ export interface EnrichSubject {
  * 아니라 폼에 들어있는 값을 그대로 받는다 — 사용자가 회사명을 고쳤다면 고친
  * 값으로 검색된다.
  *
- * 결과를 확신하는 경우에는 태그를 미리 담아 둔다. 하나씩 누르게 하면 손이 너무
- * 많이 가기 때문이다. 대신 잘못 담긴 것은 눌러서 뺄 수 있고, 확신하지 못한
- * 결과는 담지 않고 사용자가 직접 고르게 한다.
+ * 검색 결과는 태그를 자동으로 반영하지 않는다. 사용자가 출처와 확신도를 확인한
+ * 뒤 직접 고른 값만 폼 드래프트에 담고, 최종 저장은 각 화면이 담당한다.
  */
 export function EnrichPanel({
   subject,
@@ -60,42 +89,27 @@ export function EnrichPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<EnrichSuggestion | null>(initial);
-  const [autoApplied, setAutoApplied] = useState(0);
 
   async function search() {
     setBusy(true);
     setError(null);
     setResult(null);
-    setAutoApplied(0);
     try {
       const res = await fetch("/api/enrich", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(subject),
       });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error ?? "조사에 실패했습니다.");
+      const json: unknown = await res.json();
+      if (!res.ok) { setError(responseError(json)); return; }
+      const suggestion = parseSuggestion(json);
+      if (!suggestion) {
+        setError("invalid_response");
         return;
       }
-      const suggestion = json as EnrichSuggestion;
       setResult(suggestion);
-
-      // 확신하는 결과만 미리 담는다.
-      // (search 는 이벤트 핸들러라 이 시점의 props 가 최신이다)
-      if (suggestion.confident) {
-        const merged = [...new Set([...currentCapabilities, ...suggestion.capabilities])];
-        onApply({
-          capabilities: merged,
-          fromWeb: true,
-          ...(suggestion.industry && !currentIndustry
-            ? { industry: suggestion.industry }
-            : {}),
-        });
-        setAutoApplied(merged.length - currentCapabilities.length);
-      }
     } catch {
-      setError("네트워크 오류가 발생했습니다.");
+      setError("upstream_failure");
     } finally {
       setBusy(false);
     }
@@ -115,22 +129,21 @@ export function EnrichPanel({
   }
 
   return (
-    <section className="space-y-3 rounded-2xl border border-line bg-surface p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">웹에서 회사 정보 찾기</h2>
-          <p className="mt-0.5 text-xs text-soft">
-            명함에 없는 업종·취급품목을 검색해 채웁니다.
-          </p>
+    <section className="space-y-3 rounded-2xl border border-line bg-surface p-3 shadow-sm sm:p-4">
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 [word-break:keep-all]">
+          <h2 className="text-xs font-semibold sm:text-sm">웹에서 회사 정보 찾기</h2>
+          <p className="mt-0.5 text-[11px] text-soft sm:text-xs">명함에 없는 업종·취급품목을 검색해 채웁니다.</p>
         </div>
-        <button
-          type="button"
+        <Action
           onClick={search}
           disabled={busy || !subject.company?.trim()}
-          className="shrink-0 rounded-xl bg-brand px-3.5 py-2 text-xs font-semibold text-brand-ink disabled:opacity-50"
+          loading={busy}
+          icon={<Search aria-hidden="true" className="size-4" />}
+          className="w-full shrink-0 focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2 sm:w-auto"
         >
-          {busy ? "검색 중…" : result ? "다시 검색" : "검색"}
-        </button>
+          {result ? "다시 검색" : "검색"}
+        </Action>
       </div>
 
       {!subject.company?.trim() && (
@@ -138,14 +151,14 @@ export function EnrichPanel({
       )}
 
       {busy && (
-        <p className="flex items-center gap-2 text-xs text-soft">
+        <p role="status" aria-live="polite" className="flex items-center gap-2 text-sm text-soft">
           <span className="h-3 w-3 animate-spin rounded-full border-2 border-brand border-t-transparent" />
           웹을 뒤지는 중… 20~40초 걸릴 수 있습니다
         </p>
       )}
 
       {error && (
-        <p className="rounded-xl bg-danger-soft px-3.5 py-2.5 text-xs text-danger">{error}</p>
+        <p role="alert" className="rounded-xl bg-danger-soft px-3.5 py-2.5 text-sm text-danger">{error}</p>
       )}
 
       {result && (
@@ -168,13 +181,15 @@ export function EnrichPanel({
                   적용됨 ✓
                 </span>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => onApply({ industry: result.industry! })}
-                  className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-medium"
+                <Action
+                  variant="secondary"
+                  onClick={() => {
+                    if (result.industry) onApply({ industry: result.industry });
+                  }}
+                  className="shrink-0 focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2"
                 >
                   업종 적용
-                </button>
+                </Action>
               )}
             </div>
           )}
@@ -184,10 +199,10 @@ export function EnrichPanel({
               <div className="flex items-center justify-between gap-3">
                 <span className="text-xs font-semibold text-soft">
                   제안 태그{" "}
-                  <span className="font-normal text-faint">— 눌러서 담기/빼기</span>
+                  <span className="font-normal text-soft">— 눌러서 담기/빼기</span>
                 </span>
-                <button
-                  type="button"
+                <Action
+                  variant="quiet"
                   onClick={() =>
                     onApply({
                       fromWeb: true,
@@ -196,44 +211,23 @@ export function EnrichPanel({
                         : [...new Set([...currentCapabilities, ...suggested])],
                     })
                   }
-                  className="shrink-0 text-xs font-medium text-brand"
+                  className="shrink-0 text-sm text-brand focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2"
                 >
                   {allApplied ? "전부 빼기" : "전부 담기"}
-                </button>
+                </Action>
               </div>
 
               <div className="flex flex-wrap gap-1.5">
                 {suggested.map((tag) => {
                   const on = currentCapabilities.includes(tag);
-                  return (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => toggleTag(tag)}
-                      aria-pressed={on}
-                      className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                        on
-                          ? "bg-brand text-brand-ink"
-                          : "border border-brand/30 bg-brand-soft text-brand"
-                      }`}
-                    >
-                      {on ? `${tag} ✓` : `+ ${tag}`}
-                    </button>
-                  );
+                  return <Chip key={tag} selected={on} onClick={() => toggleTag(tag)}>{on ? `✓ ${tag}` : `+ ${tag}`}</Chip>;
                 })}
               </div>
 
-              {autoApplied > 0 ? (
+              {appliedCount > 0 && (
                 <p className="rounded-lg bg-ok-soft px-3 py-2 text-xs font-medium text-ok">
-                  {autoApplied}개를 자동으로 담았습니다. 필요 없는 것은 눌러서 빼세요.
-                  아래 저장을 눌러야 반영됩니다.
+                  {appliedCount}개를 선택했습니다. 아래 저장을 눌러야 반영됩니다.
                 </p>
-              ) : (
-                appliedCount > 0 && (
-                  <p className="rounded-lg bg-ok-soft px-3 py-2 text-xs font-medium text-ok">
-                    {appliedCount}개 담았습니다. 아래 저장을 눌러야 반영됩니다.
-                  </p>
-                )
               )}
             </div>
           ) : (
@@ -242,17 +236,18 @@ export function EnrichPanel({
 
           {result.sources.length > 0 && (
             <details className="text-xs text-faint">
-              <summary className="cursor-pointer">출처 {result.sources.length}건</summary>
+              <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium text-brand focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2"><ChevronDown aria-hidden="true" className="size-4" />출처 {result.sources.length}건 보기</summary>
               <ul className="mt-1.5 space-y-1">
-                {result.sources.slice(0, 8).map((url) => (
-                  <li key={url} className="truncate">
+                {result.sources.slice(0, 8).map((source) => (
+                  <li key={source.url} className="min-w-0">
                     <a
-                      href={url}
+                      href={source.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-brand underline"
+                      className="flex min-h-11 min-w-0 items-center gap-2 break-words text-brand underline focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2 [word-break:keep-all]"
                     >
-                      {url}
+                      <ExternalLink aria-hidden="true" className="size-4 shrink-0" />
+                      {source.title || source.url}
                     </a>
                   </li>
                 ))}

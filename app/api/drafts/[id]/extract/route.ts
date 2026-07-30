@@ -1,94 +1,171 @@
 import { NextResponse } from "next/server";
 import { getAuthorizedUser } from "@/lib/auth";
 import { extractCardFromImage } from "@/lib/ai/extract";
-import { DRAFT_COLUMNS, withImageUrls } from "@/lib/drafts";
+import { DRAFT_COLUMNS, withImageUrlsResult } from "@/lib/drafts";
+import { errorResponse } from "@/lib/http-contracts";
+import { validateDownloadedImage } from "@/lib/image-signature";
 
 export const maxDuration = 120;
 
 type Params = { params: Promise<{ id: string }> };
+type RpcRow = {
+  readonly code: string;
+  readonly draftId: string | null;
+  readonly processingToken: string | null;
+  readonly status: string | null;
+  readonly attempts: number | null;
+};
 
-/**
- * 이 실패가 나면 뒤이은 건도 전부 같은 이유로 실패한다 — 큐를 계속 돌릴 이유가 없다.
- *
- * AI 계층이 상태 코드를 그대로 던지지 않고 한국어 메시지로 바꿔버려서
- * (claude.ts / codex.ts) 문자열로 판별한다. 메시지를 고치면 여기도 같이 고쳐야 한다.
- */
 function shouldStopQueue(message: string): boolean {
   return message.includes("사용량 한도") || message.includes("인증이 만료");
 }
 
-function mimeOf(path: string): string {
-  if (path.endsWith(".png")) return "image/png";
-  if (path.endsWith(".webp")) return "image/webp";
-  return "image/jpeg";
-}
-
-/**
- * 대기열의 사진 한 장을 AI 로 분석한다.
- *
- * 클라이언트 워커가 한 건씩(동시성 1) 부른다. 구독 OAuth 는 429 재시도 계층이
- * 없어서 동시에 부르면 한도만 빨리 태우기 때문이다.
- */
 export async function POST(_request: Request, { params }: Params) {
   const auth = await getAuthorizedUser();
-  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!auth) return errorResponse("unauthorized");
   const { user, supabase } = auth;
   const { id } = await params;
 
-  const { data: draft } = await supabase
-    .from("card_drafts")
-    .select("id, image_path, attempts")
-    .eq("id", id)
-    .maybeSingle();
+  const claim = await supabase.rpc("claim_card_draft", { p_draft_id: id });
+  if (claim.error) return NextResponse.json({ error: "invalid_response" }, { status: 500 });
+  const claimRow = parseRpcRow(claim.data);
+  if (!claimRow) return NextResponse.json({ error: "invalid_response" }, { status: 500 });
 
-  if (!draft) {
-    return NextResponse.json({ error: "대기 중인 사진을 찾을 수 없습니다." }, { status: 404 });
+  if (claimRow.code === "not_found") {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+  if (claimRow.code === "busy") {
+    return NextResponse.json({ error: "busy", code: "busy" }, { status: 409 });
+  }
+  if (claimRow.code === "already_extracted") {
+    return draftResponse(supabase, id);
+  }
+  if (claimRow.code !== "claimed" || claimRow.processingToken === null) {
+    return NextResponse.json({ error: claimRow.code }, { status: 500 });
   }
 
-  const attempts = (draft.attempts as number) + 1;
+  const token = claimRow.processingToken;
+  const { data: draft, error: draftError } = await supabase
+    .from("card_drafts")
+    .select("id, image_path")
+    .eq("id", id)
+    .maybeSingle();
+  if (draftError || !isRecord(draft) || typeof draft.image_path !== "string") {
+    await failClaim(supabase, id, token, "invalid_response");
+    return NextResponse.json({ error: "invalid_response" }, { status: 500 });
+  }
 
   const { data: blob, error: downloadError } = await supabase.storage
     .from("card-images")
-    .download(draft.image_path as string);
-
+    .download(draft.image_path);
   if (downloadError || !blob) {
     const message = `이미지를 불러오지 못했습니다: ${downloadError?.message ?? "unknown"}`;
-    await supabase
-      .from("card_drafts")
-      .update({ status: "failed", error: message, attempts })
-      .eq("id", id);
+    const failed = await failClaim(supabase, id, token, message);
+    if (failed === "stale_token") return staleResponse();
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  const mime = mimeOf(draft.image_path as string);
-  const base64 = Buffer.from(await blob.arrayBuffer()).toString("base64");
+  const image = validateDownloadedImage(
+    draft.image_path,
+    new Uint8Array(await blob.arrayBuffer()),
+    blob.type,
+  );
+  if (!image.ok) {
+    const failed = await failClaim(supabase, id, token, image.code);
+    if (failed === "stale_token") return staleResponse();
+    return errorResponse(image.code);
+  }
 
   try {
-    const card = await extractCardFromImage(supabase, user.id, `data:${mime};base64,${base64}`);
-    const { data, error } = await supabase
-      .from("card_drafts")
-      .update({ status: "extracted", extracted: card, error: null, attempts })
-      .eq("id", id)
-      .select(DRAFT_COLUMNS)
-      .single();
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    const [row] = await withImageUrls(supabase, [data]);
-    return NextResponse.json(row);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "분석에 실패했습니다.";
-    // 사진은 그대로 두고 failed 로만 표시한다 — 재시도하거나 직접 입력할 수 있다.
-    const { data } = await supabase
-      .from("card_drafts")
-      .update({ status: "failed", error: message, attempts })
-      .eq("id", id)
-      .select(DRAFT_COLUMNS)
-      .single();
-
-    const [row] = data ? await withImageUrls(supabase, [data]) : [null];
+    const base64 = Buffer.from(image.value.bytes).toString("base64");
+    const card = await extractCardFromImage(
+      supabase,
+      user.id,
+      `data:${image.value.contentType};base64,${base64}`,
+    );
+    const completed = await supabase.rpc("complete_card_draft_extraction", {
+      p_draft_id: id,
+      p_processing_token: token,
+      p_extracted: card,
+    });
+    const completeRow = parseRpcRow(completed.data);
+    if (completed.error || !completeRow) {
+      return NextResponse.json({ error: "invalid_response" }, { status: 500 });
+    }
+    if (completeRow.code === "stale_token") return staleResponse();
+    if (completeRow.code !== "completed") {
+      return NextResponse.json({ error: completeRow.code }, { status: 500 });
+    }
+    return draftResponse(supabase, id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "분석에 실패했습니다.";
+    const failed = await failClaim(supabase, id, token, message);
+    if (failed === "stale_token") return staleResponse();
+    const draftResponseValue = await draftResponsePayload(supabase, id);
     return NextResponse.json(
-      { error: message, stopQueue: shouldStopQueue(message), draft: row },
+      {
+        error: message,
+        stopQueue: shouldStopQueue(message),
+        draft: draftResponseValue,
+      },
       { status: 502 },
     );
   }
+}
+
+async function draftResponse(supabase: Parameters<typeof withImageUrlsResult>[0], id: string) {
+  const row = await draftResponsePayload(supabase, id);
+  return row === null
+    ? NextResponse.json({ error: "not_found" }, { status: 404 })
+    : NextResponse.json(row);
+}
+
+async function draftResponsePayload(
+  supabase: Parameters<typeof withImageUrlsResult>[0],
+  id: string,
+) {
+  const { data, error } = await supabase
+    .from("card_drafts")
+    .select(DRAFT_COLUMNS)
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !data) return null;
+  const rows = await withImageUrlsResult(supabase, [data]);
+  return rows.ok ? (rows.value[0] ?? null) : null;
+}
+
+async function failClaim(
+  supabase: Parameters<typeof withImageUrlsResult>[0],
+  id: string,
+  token: string,
+  message: string,
+): Promise<string | null> {
+  const result = await supabase.rpc("fail_card_draft_extraction", {
+    p_draft_id: id,
+    p_processing_token: token,
+    p_error: message,
+  });
+  if (result.error) return null;
+  const row = parseRpcRow(result.data);
+  return row?.code ?? null;
+}
+
+function staleResponse() {
+  return NextResponse.json({ error: "stale_token", code: "stale_token" }, { status: 409 });
+}
+
+function parseRpcRow(value: unknown): RpcRow | null {
+  const row = Array.isArray(value) ? value[0] : value;
+  if (!isRecord(row) || typeof row.code !== "string") return null;
+  return {
+    code: row.code,
+    draftId: typeof row.draft_id === "string" ? row.draft_id : null,
+    processingToken: typeof row.processing_token === "string" ? row.processing_token : null,
+    status: typeof row.status === "string" ? row.status : null,
+    attempts: typeof row.attempts === "number" ? row.attempts : null,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

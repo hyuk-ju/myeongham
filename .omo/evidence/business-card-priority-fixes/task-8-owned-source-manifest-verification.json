@@ -1,0 +1,9 @@
+{
+  "scenario": "Canonical Todo8 owned-source attribution verification",
+  "manifest": ".omo/evidence/business-card-priority-fixes/task-8-owned-source-manifest.json",
+  "verified_at": "2026-07-30T02:23:29+0900",
+  "invocation": "node standalone equality script: read manifest entries, stat each path, normalize git mode (100000 | permissions), compute SHA-256, compare every mode and digest",
+  "entries": 16,
+  "failures": [],
+  "observable": "All manifest paths exist and every recorded mode/content SHA-256 matches the current file exactly. No source or screenshot was changed during verification."
+}

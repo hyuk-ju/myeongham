@@ -1,0 +1,1 @@
+{"status":"blocked","gate":"docker_gate","scenario":"full","reason":"Docker executable or daemon is unavailable"}

@@ -1,0 +1,9 @@
+{
+  "gate": "lint",
+  "command": "npm run lint",
+  "startedAt": "2026-07-30T05:13:58.553Z",
+  "finishedAt": "2026-07-30T05:14:00.763Z",
+  "exitCode": 0,
+  "stdout": "\n> myeongham@0.1.0 lint\n> eslint\n\n",
+  "stderr": ""
+}

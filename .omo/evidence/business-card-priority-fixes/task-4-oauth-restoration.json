@@ -1,0 +1,29 @@
+{
+  "task": "4",
+  "change": "oauth_company_search_restoration",
+  "status": "pass",
+  "contract": {
+    "providers": ["openai-codex", "anthropic-claude", "openai-api"],
+    "nullProvider": "active_oauth",
+    "openaiCodexDisclosure": "non_official_experimental",
+    "automaticFallback": false,
+    "upstreamBodyLeakage": false
+  },
+  "verification": [
+    {
+      "command": "npm test -- --run tests/unit/oauth-enrich-restoration.spec.ts tests/unit/oauth-company-search-fail-closed.spec.ts tests/unit/oauth-enrich-settings-ui.spec.tsx tests/unit/provider-routing.spec.ts tests/unit/enrich-routes.spec.ts",
+      "result": "5 files, 17 tests passed"
+    },
+    {
+      "command": "npm run typecheck -- --pretty false",
+      "result": "exit 0"
+    },
+    {
+      "review": "independent oauth_security_review and oauth_contract_review",
+      "result": "PASS; no findings"
+    }
+  ],
+  "liveGate": "credential_gate",
+  "remoteMutation": false,
+  "secretsOrPii": "none"
+}

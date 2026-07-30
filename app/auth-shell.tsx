@@ -1,29 +1,92 @@
-/** 로그인/가입 화면 공통 껍데기 — 앱 아이덴티티를 Clerk 카드 위에 얹는다. */
-export function AuthShell({
-  error,
-  children,
-}: {
+import type { ReactNode } from "react";
+import { AlertCircle } from "lucide-react";
+
+export const authAppearance = {
+  variables: {
+    colorPrimary: "var(--brand)",
+    colorForeground: "var(--ink)",
+    colorMutedForeground: "var(--ink-soft)",
+    colorBackground: "var(--surface)",
+    colorInputBackground: "var(--surface)",
+    colorInputForeground: "var(--ink)",
+    borderRadius: "0.75rem",
+    fontFamily: "inherit",
+  },
+  elements: {
+    rootBox: "w-full",
+    cardBox: "w-full shadow-none",
+    card: "w-full bg-transparent p-0 shadow-none",
+    header: "hidden",
+    socialButtonsBlockButton:
+      "min-h-11 border-line-strong bg-surface text-ink hover:bg-surface-hover",
+    dividerLine: "bg-line",
+    dividerText: "text-soft",
+    formFieldLabel: "text-ink",
+    formFieldInput:
+      "min-h-11 border-line-strong bg-surface text-base text-ink focus:border-brand",
+    formButtonPrimary:
+      "min-h-11 bg-brand text-brand-ink hover:bg-brand-hover focus-visible:ring-focus",
+    footer: "bg-transparent",
+    footerActionText: "text-soft",
+    footerActionLink: "min-h-11 text-brand",
+    identityPreviewText: "text-ink",
+    identityPreviewEditButton: "text-brand",
+    formFieldErrorText: "text-danger",
+    alert: "border-danger/25 bg-danger-soft text-danger",
+  },
+} as const;
+
+type AuthViewProps = Readonly<{
+  children: ReactNode;
   error?: string;
-  children: React.ReactNode;
-}) {
+  title?: string;
+  description?: string;
+}>;
+
+export function AuthView({
+  children,
+  error,
+  title = "명함첩",
+  description = "찍어두면 필요할 때 찾아줍니다.",
+}: AuthViewProps) {
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-5 px-6 py-10">
-      <div className="space-y-2.5 text-center">
-        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-xl font-bold text-brand-ink shadow-md shadow-brand/25">
+    <main
+      id="main-content"
+      className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-4 py-[max(2rem,env(safe-area-inset-top))] sm:px-6"
+    >
+      <div className="mb-7 text-center">
+        <span
+          aria-hidden="true"
+          className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-brand text-xl font-bold text-brand-ink shadow-lg shadow-brand/20"
+        >
           명
         </span>
-        <h1 className="text-2xl font-bold tracking-tight">명함첩</h1>
-        <p className="text-sm text-soft">찍어두면 필요할 때 찾아줍니다.</p>
+        <h1 className="mt-4 text-3xl font-bold tracking-[-0.035em]">{title}</h1>
+        <p className="mt-1 text-sm text-soft">{description}</p>
       </div>
 
-      {error === "not_allowed" && (
-        <p className="w-full max-w-sm rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">
-          허용되지 않은 계정입니다. <code className="font-mono">ALLOWED_EMAILS</code> 에
-          등록된 이메일로 로그인하세요.
-        </p>
-      )}
+      {error === "not_allowed" ? (
+        <div
+          role="alert"
+          className="mb-4 flex gap-3 rounded-xl border border-danger/25 bg-danger-soft px-4 py-3 text-sm text-danger"
+        >
+          <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          <p className="ui-copy-keep">
+            허용되지 않은 계정입니다. 관리자 설정(
+            <code className="font-mono text-xs">ALLOWED_EMAILS</code>)에 등록된
+            이메일로 다시 로그인하거나 권한을 요청하세요.
+          </p>
+        </div>
+      ) : null}
 
-      <div className="flex w-full max-w-sm justify-center">{children}</div>
+      <div
+        data-testid="auth-frame"
+        className="ui-surface ui-surface-raised w-full overflow-hidden px-4 py-5 sm:px-6 sm:py-6"
+      >
+        {children}
+      </div>
     </main>
   );
 }
+
+export const AuthShell = AuthView;

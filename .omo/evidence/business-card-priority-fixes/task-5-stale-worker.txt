@@ -1,0 +1,5 @@
+scenario=draft-queue-stale-worker
+invocation=npm run test -- --run tests/unit/upstream-observer.spec.ts tests/unit/draft-queue-state.spec.ts tests/unit/draft-queue-transport.spec.ts tests/unit/draft-queue-stale-worker.spec.ts tests/unit/draft-queue-abort.spec.ts tests/unit/extract-route.spec.ts
+status=PASS
+observable=11 tests pass; busy is 409-safe, stale_token remains processing, upload siblings stay independent, claim precedes storage/AI, completion uses token-fenced RPC, abort cleanup releases late resources, and server-side observer hold/release records one call
+artifacts=tests/unit/upstream-observer.spec.ts,tests/e2e/upstream-observer.mjs,tests/unit/draft-queue-state.spec.ts,tests/unit/draft-queue-transport.spec.ts,tests/unit/draft-queue-stale-worker.spec.ts,tests/unit/draft-queue-abort.spec.ts,tests/unit/extract-route.spec.ts

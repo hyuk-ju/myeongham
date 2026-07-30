@@ -10,6 +10,7 @@
  */
 import { createHash, randomBytes } from "node:crypto";
 import type { TokenSet } from "@/lib/ai/openai-oauth";
+import { ProviderAuthError } from "@/lib/ai/provider-types";
 
 export const CLAUDE_OAUTH = {
   clientId: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
@@ -86,6 +87,7 @@ async function requestToken(body: Record<string, string>): Promise<TokenSet> {
     body: JSON.stringify(body),
   });
   if (!res.ok) {
+    if (res.status === 401) throw new ProviderAuthError();
     const text = await res.text().catch(() => "");
     throw new Error(`Claude 토큰 요청 실패 (${res.status}): ${text.slice(0, 300)}`);
   }

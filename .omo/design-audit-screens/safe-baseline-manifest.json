@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "policy": "No screenshot is included without independent route, CSS viewport, state, and privacy provenance.",
+  "included": [],
+  "excluded": [
+    {
+      "path": "00-before-login.png",
+      "sha256": "de238ccc32ad699feb2a0f8a1aa1cba83d795f7f541e217e7ef6c720c3921e1e",
+      "pixelWidth": 780,
+      "pixelHeight": 1688,
+      "reasons": ["route_viewport_state_provenance_absent"]
+    },
+    {
+      "path": "01-dev-login.png",
+      "sha256": "f8f78fbb70d79b624db58990cde2df4b94629e2824e4be4885863fb7d30b6e58",
+      "pixelWidth": 780,
+      "pixelHeight": 1688,
+      "reasons": ["duplicate_bytes", "route_viewport_state_provenance_absent"]
+    },
+    {
+      "path": "02-home-mobile.png",
+      "sha256": "f8f78fbb70d79b624db58990cde2df4b94629e2824e4be4885863fb7d30b6e58",
+      "pixelWidth": 780,
+      "pixelHeight": 1688,
+      "reasons": ["duplicate_bytes", "mislabeled_visual_state", "route_viewport_state_provenance_absent"]
+    },
+    {
+      "path": "03-capture-mobile.png",
+      "sha256": "d12db70a64d1b8d77286f3e1ae4e7b92ae0c0d2e6b989e7d5d69af456ec8c7b0",
+      "pixelWidth": 780,
+      "pixelHeight": 1688,
+      "reasons": ["route_viewport_state_provenance_absent"]
+    },
+    {
+      "path": "04-review-mobile.png",
+      "sha256": "f76e99088dbc7d6f6de9dd4c120f0725c27fcca8c68606ece5371adc7e4d5e3d",
+      "pixelWidth": 780,
+      "pixelHeight": 1688,
+      "reasons": ["route_viewport_state_provenance_absent"]
+    },
+    {
+      "path": "05-cards-mobile.png",
+      "sha256": "32428a3983931266ea4c150d34a890ca93bfa98c11ffce09eaf96425c29fc51f",
+      "pixelWidth": 780,
+      "pixelHeight": 1688,
+      "reasons": ["private_card_data", "route_viewport_state_provenance_absent"]
+    },
+    {
+      "path": "06-enrich-mobile.png",
+      "sha256": "aa5be16826593bd80ef3bad2dc13cfd88c8be7bd40eb0525c68435da49c86fe3",
+      "pixelWidth": 780,
+      "pixelHeight": 1688,
+      "reasons": ["route_viewport_state_provenance_absent"]
+    },
+    {
+      "path": "07-settings-mobile.png",
+      "sha256": "10c69a2e4ed65d19d86fced3f3425d0dc8d1a9b199adf7233239aa64047514ec",
+      "pixelWidth": 780,
+      "pixelHeight": 3378,
+      "reasons": ["email_address", "full_or_partial_account_id", "route_viewport_state_provenance_absent"]
+    },
+    {
+      "path": "08-cards-desktop.png",
+      "sha256": "07a554a2e1aa63d8338da5ddf400fa391f7ba2afc429ebbecb15c887275317de",
+      "pixelWidth": 2560,
+      "pixelHeight": 1800,
+      "reasons": ["private_card_data", "route_viewport_state_provenance_absent"]
+    },
+    {
+      "path": "09-settings-desktop.png",
+      "sha256": "97f4d5a353b3cfc27415a8afb6c49477e84a9867222ea900255c2497b9a967ab",
+      "pixelWidth": 2560,
+      "pixelHeight": 2820,
+      "reasons": ["email_address", "full_or_partial_account_id", "route_viewport_state_provenance_absent"]
+    }
+  ]
+}

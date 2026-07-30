@@ -1,0 +1,4 @@
+scenario: explicit provider fail-closed routing
+invocation: npm run test -- --run tests/unit/provider-routing.spec.ts
+observable: 1 test file, 2 tests passed; server-owned openai-api enrichment throws provider_unconfigured before OAuth token lookup and private web_search, with no fallback token call
+captured: 2026-07-29 local run

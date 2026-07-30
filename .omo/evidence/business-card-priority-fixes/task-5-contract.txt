@@ -1,0 +1,8 @@
+contract=DraftQueueSnapshot and DraftQueueActions exported from lib/use-draft-queue.ts
+pending_upload={localId:string,previewUrl:string,status:uploading|failed,errorCode:string|null}
+actions=add,retryUpload,discardUpload,refresh,retry,retryFailed,discard,acknowledgeFinalized
+selectors=ready,failed,waiting,processing
+terminal_delete=acknowledgeFinalized removes client row only after card id success and calls no DELETE
+resource_lifecycle=createUploadResourceRegistry/releaseUploadResource revoke late uploads and delete File references on success/discard/unmount
+active_extract=AbortController signal is passed to transport; abort triggers server refresh instead of client failure
+server_observer=tests/e2e/upstream-observer.mjs writes only count/held state under E2E_RUN_ROOT and uses release sentinel; no product route/auth bypass

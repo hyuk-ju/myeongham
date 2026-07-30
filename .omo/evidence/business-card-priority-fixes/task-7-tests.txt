@@ -1,0 +1,36 @@
+Todo 7 deterministic evidence
+
+Unit
+- Invocation: npm run test -- --run tests/unit/ui-primitives.spec.tsx tests/unit/baseline tests/unit/foundation/safe-baseline.test.ts
+- Observable: 4 test files, 13 tests passed.
+
+Component tests
+- Invocation: npm run test:ct -- tests/ct/primitives.spec.tsx --project=chromium
+- Observable: 3 responsive primitive tests passed at 375, 768, and 1280 CSS pixels.
+- Artifacts: task-7-primitives-375.png, task-7-primitives-768.png, task-7-primitives-1280.png
+- Invocation: npm run test:ct -- tests/ct/core-views.spec.tsx tests/ct/auth-not-allowed.spec.tsx --project=chromium
+- Observable: 10 auth/not-allowed tests passed; axe found no violations in the audited production-style fixture.
+- Artifacts: task-7-auth-375.png, task-7-auth-768.png, task-7-auth-1280.png, task-7-not-allowed-375.png, task-7-not-allowed-768.png, task-7-not-allowed-1280.png
+
+Static checks
+- Invocation: npx eslint app/auth-shell.tsx app/layout.tsx app/not-allowed components/ui tests/ct/auth-not-allowed.spec.tsx tests/ct/core-views.spec.tsx tests/ct/primitives.spec.tsx tests/e2e/primitives-visual.spec.ts playwright-ct.config.ts
+- Observable: exit 0 with no warnings.
+- Invocation: npx playwright install --list
+- Observable: Playwright 1.62.0 lists Chromium revision 1234.
+
+Scope guard
+- Observable: app/dev/primitives route files are absent; the showcase is imported only by CT tests from components/ui/primitive-showcase.tsx.
+- Production route probe: tests/e2e/primitive-production-404.spec.ts requests /dev/primitives and asserts HTTP 404 through the owned production lifecycle.
+- Invocation: node scripts/run-local-production-e2e.mjs -- tests/e2e/primitive-production-404.spec.ts --project=chromium
+- Observable: blocked before build with credential_gate because NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, CLERK_TESTING_TOKEN, CLERK_FAPI, DEV_LOGIN_USER_ID, and ALLOWED_USER_IDS are not configured; no remote target was contacted.
+
+Named concurrent blockers
+- npm run typecheck is blocked by pre-existing Todo 3/4/9 type errors in app/(tabs)/settings/page.tsx and app/capture/review/review-client.tsx; Todo 7 files are not reported.
+- npm run build is blocked at the same settings AISettings type error before route output; no Todo 7 production-build claim is made.
+
+Gate remediation
+- Change: auth alert copy uses the scoped `ui-copy-keep` rule (`word-break: keep-all; overflow-wrap: anywhere`) to preserve Korean word units at 375px.
+- Invocation: npm run test:ct -- tests/ct/auth-not-allowed.spec.tsx tests/ct/primitives.spec.tsx --project=chromium
+- Observable: 9 tests passed, including computed `word-break: keep-all`, axe, 44px target, reduced-motion, and overflow assertions.
+- Visual report: task-7-visual-qa.md
+- Static route report: task-7-static-route-check.txt

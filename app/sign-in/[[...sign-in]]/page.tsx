@@ -1,5 +1,5 @@
 import { SignIn } from "@clerk/nextjs";
-import { AuthShell } from "@/app/auth-shell";
+import { AuthView, authAppearance } from "@/app/auth-shell";
 
 export default async function SignInPage({
   searchParams,
@@ -9,8 +9,8 @@ export default async function SignInPage({
   const { error } = await searchParams;
 
   return (
-    <AuthShell error={error}>
-      <SignIn appearance={{ elements: { cardBox: "shadow-none" } }} />
-    </AuthShell>
+    <AuthView error={error}>
+      <SignIn appearance={authAppearance} />
+    </AuthView>
   );
 }

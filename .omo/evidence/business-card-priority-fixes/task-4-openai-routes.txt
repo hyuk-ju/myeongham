@@ -1,0 +1,4 @@
+scenario: deterministic first-party enrich/settings route contract fake
+invocation: npm run test -- --run tests/unit/enrich-routes.spec.ts
+observable: 1 test file, 9 tests passed; both enrich routes reject malformed JSON/unknown/empty/oversize input with invalid_input/400, map provider_unconfigured and rate_limited with stopQueue, map Claude auth_expired/401 retryable=false with stopQueue, redact unexpected provider failures, and reject non-null openai-api user models
+captured: 2026-07-29 local run

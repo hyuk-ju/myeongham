@@ -1,0 +1,13 @@
+{
+  "task": 1,
+  "gate": "docker_gate",
+  "status": "blocked_external",
+  "scenario": "credential-free local Supabase stop/start through the exclusive wrapper",
+  "invocations": [
+    "node scripts/run-local-supabase.mjs -- npx supabase stop --no-backup",
+    "node scripts/run-local-supabase.mjs -- npx supabase start"
+  ],
+  "observable": "The pinned CLI reported that neither Docker nor Podman is installed on PATH.",
+  "secretsPersisted": false,
+  "remoteMutationAttempted": false
+}

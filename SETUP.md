@@ -1,31 +1,43 @@
 # 설정 가이드
 
-> **2026-07-27 현재 상태**: 로그인이 **Clerk** 으로 바뀌었고 **설정이 모두 끝났습니다.**
-> Supabase 는 데이터베이스·저장소 역할만 하고, 인증은 Clerk 이 맡습니다.
-> Google 로그인 → 명함 목록·이미지·AI 연결까지 실동작을 확인했습니다.
->
-> 아래 1~3번은 완료된 내용의 기록입니다. 새 환경에 다시 세팅할 때 참고하세요.
+> 이 문서는 새 환경을 로컬에서 재현하고, 운영 적용 전 점검하는 절차입니다.
+> 개발/운영 자격 증명과 원격 프로젝트 값은 저장소에 기록하지 않습니다. 아래의
+> `✅` 표시는 코드에 존재하는 계약을 뜻하며, 현재 환경에서의 live 성공을 의미하지
+> 않습니다.
 
 ---
 
-## 1. Supabase 프로젝트 — ✅ 완료
+## 1. Supabase 프로젝트
 
-프로젝트 `qmsepwxdnekowqsiebnu` 에 마이그레이션이 모두 적용돼 있습니다
-(명함 테이블·인덱스·RLS·Storage 버킷, AI 토큰/설정 저장소, Clerk 기준 RLS).
+Supabase는 데이터베이스·Storage 역할을 담당하고 Clerk가 인증을 담당합니다.
+새 환경에서는 로컬 fixture-FAPI 스택을 먼저 초기화하며, 링크된 원격 프로젝트에는
+이 절차가 자동으로 적용되지 않습니다.
+
+마이그레이션 기준:
+
+- `0012`–`0014`: 기존 AI/권한/기능 기반
+- `20260729121035_draft_claim_and_finalization.sql`: queue claim, stale-token fencing,
+  원자적 finalization, `cards.source_draft_id`, 보호 컬럼 경계. `ai_settings`의 회사
+  검색 provider는 `openai-codex`, `anthropic-claude`, `openai-api`를 모두 허용하며
+  기존 `openai-codex` 설정을 강제로 변환하지 않습니다.
+
+모든 변경 함수는 Clerk `sub` 기반 owner RLS를 유지하며, 검색 함수는
+`security invoker`로 남습니다. queue transition/finalization/enrich mutation만
+좁은 `security definer` 경계를 사용하고 명시적 grants와 빈 `search_path`를 갖습니다.
 
 ---
 
-## 2. Supabase ↔ Clerk 연결 — ✅ 완료
+## 2. Supabase ↔ Clerk 연결
 
 Supabase 가 Clerk 이 발급한 로그인 토큰을 신뢰하도록 등록하는 단계입니다.
 (대시보드 로그인이 필요한 작업이라 직접 하셨습니다.)
 
-1. [Supabase 대시보드 → Authentication → Third-Party Auth](https://supabase.com/dashboard/project/qmsepwxdnekowqsiebnu/auth/third-party) 로 이동
+1. Supabase 대시보드 → Authentication → Third-Party Auth 로 이동
 2. **Add integration → Clerk** 선택
 3. Clerk 도메인에 아래 값을 그대로 붙여넣고 저장
 
 ```
-https://cosmic-caribou-59.clerk.accounts.dev
+<개발 Clerk Frontend API URL>
 ```
 
 > Clerk 쪽 준비(세션 토큰에 `role: authenticated` 클레임 추가)는 CLI 로 이미
@@ -34,8 +46,8 @@ https://cosmic-caribou-59.clerk.accounts.dev
 설정 전에는 앱을 열면 **"Supabase 연결이 한 단계 남았습니다"** 안내가 뜨고,
 같은 3단계가 화면에 적혀 있습니다. 설정 후 그 화면의 **다시 시도** 를 누르면 됩니다.
 
-기존 명함 5장과 Claude 연결은 이미 Clerk 계정(`ehlee8962@gmail.com`)으로
-이관해 뒀으므로, 연결만 하면 그대로 보입니다.
+기존 데이터와 OAuth 연결은 계정별로 분리됩니다. 이 문서에는 계정 식별자나
+명함 데이터를 기록하지 않습니다.
 
 ---
 
@@ -46,7 +58,7 @@ https://cosmic-caribou-59.clerk.accounts.dev
 
 `ALLOWED_EMAILS` 에 등록된 이메일만 앱에 들어올 수 있습니다. Clerk 으로 로그인해도
 이 목록에 없으면 거부됩니다 — 개인용 앱이라 이중으로 잠가둔 것입니다.
-현재 등록: `ehlee8962@gmail.com`, `2023030012@portal.osan.ac.kr`
+현재 허용 목록은 각 환경의 `ALLOWED_EMAILS`/`ALLOWED_USER_IDS` 값으로 관리합니다.
 
 ---
 
@@ -108,7 +120,26 @@ http://localhost:3000 접속 → Clerk 로그인 화면에서 **Google 로 로�
 
 ---
 
-## 5. AI 구독 연결 (ChatGPT / Claude — 하나만 해도 됩니다)
+## 5. AI 연결 경로
+
+명함 인식과 질문은 사용자 OAuth(구독) 경로입니다. 회사 정보 검색은 설정에서 다음
+세 경로 중 하나를 선택합니다.
+
+- **ChatGPT OAuth (비공식·실험)** — 구독 연결을 사용하지만 비공식 Codex backend에
+  의존해 예고 없이 중단되거나 응답 형식이 바뀔 수 있습니다.
+- **Claude OAuth** — 연결한 Claude 구독을 사용합니다.
+- **OpenAI API (공식·서버 소유)** — `OPENAI_API_KEY`와
+  `OPENAI_SEARCH_MODEL`(기본 `gpt-5.6`)을 사용합니다. API 사용료는 ChatGPT 구독과
+  별도입니다.
+
+`provider: null`인 회사 검색 설정은 현재 활성 OAuth 연결을 사용합니다. 특정 OAuth
+provider를 고르면 그 연결이 있을 때만 실행됩니다. 인증 만료, 사용량 제한, 비정상
+응답, 검색 미실행, 출처 없음은 고정 오류 코드로 중단하며 **다른 provider로 자동
+전환하지 않습니다.** 남은 회사는 대기 상태로 보존되므로 설정에서 Claude나 공식
+OpenAI API를 직접 선택한 뒤 다시 시도합니다. 공식 API를 선택했는데 키가 없으면
+`provider_unconfigured`를 표시합니다.
+
+### 5-1. AI 구독 연결 (ChatGPT / Claude — 하나만 해도 됩니다)
 
 앱 안에서 합니다. **설정 → AI 분석 연결**. 두 제공자를 모두 연결해 두고
 한쪽이 사용량 한도에 걸리면 "이걸로 사용" 버튼으로 전환할 수 있습니다.
@@ -136,44 +167,19 @@ http://localhost:3000 접속 → Clerk 로그인 화면에서 **Google 로 로�
 
 ---
 
-## 6. Vercel 배포 (폰에서 쓰려면 필요)
+## 6. 배포 전 preflight (읽기 전용)
 
-**GitHub 푸시는 완료했습니다** → https://github.com/hyuk-ju/- (private, `main`)
-앞으로는 `git push` 만 하면 Vercel 이 자동 재배포합니다.
+Todo 11 통합 검증은 Vercel/Supabase 설정을 읽기만 하며, 원격 migration 적용·배포·
+publish·commit·push를 수행하지 않습니다. 운영 적용 전 담당자가 별도로 다음을
+확인합니다.
 
-### 남은 단계
+1. 운영 Clerk 인스턴스와 Supabase Third-Party Auth가 같은 Frontend API를 가리키는지 확인
+2. 운영 환경변수에 서버 전용 키를 입력하고 브라우저 번들에 포함되지 않는지 확인
+3. `0012` 이후 migration을 백업·승인된 순서로 적용하고 DB/RLS smoke를 재실행
+4. Vercel build 로그에서 remote Supabase mutation·secret 출력이 없는지 확인
 
-1. [vercel.com/new](https://vercel.com/new) → GitHub 계정 연결 → 저장소 `-` 선택
-2. **Environment Variables** 에 아래 5개를 넣습니다 (`.env.local` 에서 그대로 복사)
-
-   | 변수 | 비고 |
-   |---|---|
-   | `NEXT_PUBLIC_SUPABASE_URL` | |
-   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | |
-   | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | |
-   | `CLERK_SECRET_KEY` | 비밀값 — 절대 코드에 넣지 말 것 |
-   | `ALLOWED_EMAILS` | 본인 이메일 |
-
-   > `.env.local` 은 `.gitignore` 에 있어 저장소에 올라가지 않습니다. 그래서
-   > Vercel 에는 직접 넣어야 합니다.
-
-3. **Deploy**
-
-### 배포 후 — Clerk 프로덕션 인스턴스
-
-지금 Clerk 은 **개발 인스턴스**(`pk_test_…`)라 배포 도메인에서 제대로 안 됩니다.
-실제로 쓰려면:
-
-1. Clerk 대시보드에서 **Production 인스턴스** 생성 (또는 `clerk deploy`)
-2. Vercel 환경변수의 Clerk 키 2개를 프로덕션 키(`pk_live_…`, `sk_live_…`)로 교체
-3. 프로덕션 Clerk 도메인(`https://clerk.내도메인.com`)을
-   **Supabase → Third-Party Auth** 에 **추가로** 등록 (개발용과 별개입니다)
-4. 프로덕션 인스턴스에도 세션 토큰 `role: authenticated` 클레임 설정
-   (`clerk config patch --instance prod --json '{"session":{"claims":{"role":"authenticated"}}}'`)
-
-### 폰에서 앱처럼 쓰기
-
-배포 주소 접속 → 공유 → **홈 화면에 추가**
+이 문서의 로컬 명령은 새 임시 포트/임시 디렉터리에서 실행하며, 원격 값이 감지되면
+`remote_target_gate`로 중단합니다.
 
 ---
 
@@ -212,14 +218,28 @@ http://localhost:3000 접속 → Clerk 로그인 화면에서 **Google 로 로�
 
 ---
 
-## 검증 상태
+## 7. 검증과 증적
 
 | 항목 | 상태 |
 |---|---|
-| Claude 구독 OAuth 연결 | ✅ 실동작 확인 (2026-07-27) |
-| Claude 구독으로 명함 이미지 인식 | ✅ 베트남·한국 명함 실물로 확인 (신뢰도 0.9) |
-| ChatGPT(Codex) 구독 OAuth | 코드 준비 완료, 실연결 미확인 |
-| Codex 백엔드의 이미지 입력 | 미확인 — Claude 쪽이 동작하므로 급하지 않음 |
+| 로컬 unit/CT/lint/typecheck/build | `npm run test`, `npm run test:ct`, `npm run lint`, `npm run typecheck`, `npm run build` |
+| 로컬 DB/RLS/동시성 | `npm run test:db:local`, `npm run test:db:concurrency -- --scenario full` (fixture-FAPI wrapper 필수) |
+| production E2E | `node scripts/run-local-production-e2e.mjs -- ...` (Clerk identity + local data-plane 조건 필요) |
+| 공식 OpenAI live smoke | `npm run test:openai:live -- --company OpenAI` (키가 있을 때만) |
+| 증적 검사/동결 | `npm run evidence:scan`, `npm run delivery:snapshot`, `npm run evidence:freeze` |
+
+자격 증명 누락은 `credential_gate`, Docker 미실행은 `docker_gate`, 원격 DB와
+OpenAI live 검증은 `blocked_external`로 기록합니다. 이 상태를 pass로 바꾸지 않습니다.
+실행 후 sanitized 영수증은 `.omo/evidence/business-card-priority-fixes/`에 두며,
+raw trace·auth state·서버·임시 디렉터리는 cleanup receipt 확인 후 제거합니다.
+
+## 8. 롤백과 운영 적용
+
+Todo 11은 원격 migration을 적용하거나 배포·커밋하지 않습니다. 운영 적용 시에는
+백업과 승인 후 `0012` 이후 순서를 확인하고, migration별 smoke/RLS 테스트가 통과한
+것만 다음 단계로 진행합니다. 실패 시 새 migration을 덧대어 상태를 명시적으로
+복구하거나 검증된 백업을 되돌린 뒤 `npm run test:db:local`과 동시성 테스트를 다시
+실행합니다. 보호 컬럼 grants/RLS 변경을 수동 SQL로 우회하지 마세요.
 
 ChatGPT 경로를 쓰다 문제가 생기면 설정에서 Claude로 전환하면 됩니다.
 모델명이 안 맞을 때는 설정의 **작업별 모델** 에서 다른 모델을 고르거나,
@@ -270,7 +290,7 @@ DEV_LOGIN_USER_ID=user_…   # Clerk 사용자 ID
 |---|---|
 | `토큰 조회 실패: No suitable key or wrong key type` | **2번(Supabase ↔ Clerk 연결)을 안 했습니다.** 가장 흔한 원인 |
 | 로그인 후 계속 `/sign-in` 으로 튕김 | `ALLOWED_EMAILS` 에 로그인한 이메일이 없음 |
-| 명함이 0장으로 보임 | 다른 계정으로 로그인함 — 데이터는 `ehlee8962@gmail.com` 계정에 있습니다 |
+| 명함이 0장으로 보임 | 다른 계정으로 로그인했거나 로컬 Supabase/RLS preflight가 끝나지 않았습니다 |
 | `환경변수 ... 가 설정되지 않았습니다` | `.env.local` 누락 → 서버 재시작 필요 |
 | `/api/dev/login` 이 404 | 프로덕션 빌드이거나 Clerk 키가 `sk_live_` — 개발 서버에서만 열립니다 |
 | `/api/dev/login` 이 400 | `DEV_LOGIN_USER_ID` 없음 → `.env.local` 에 넣고 서버 재시작 |

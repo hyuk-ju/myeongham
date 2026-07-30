@@ -1,0 +1,5 @@
+Todo 7 static route/chunk guard
+
+Invocation: test ! -e app/dev/primitives/page.tsx && test ! -e app/dev/primitives/showcase.tsx && ! rg -n 'app/dev/primitives|/dev/primitives' app components tests --glob '!tests/e2e/primitive-production-404.spec.ts' --glob '!tests/ct/**'
+Observable: PASS. No development primitive route source or production import remains. The production 404 test remains as the only intentional route reference.
+Production lifecycle probe: credential_gate because Clerk identity inputs are absent; no production build or route success is claimed.

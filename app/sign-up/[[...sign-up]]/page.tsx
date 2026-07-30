@@ -1,10 +1,10 @@
 import { SignUp } from "@clerk/nextjs";
-import { AuthShell } from "@/app/auth-shell";
+import { AuthView, authAppearance } from "@/app/auth-shell";
 
 export default function SignUpPage() {
   return (
-    <AuthShell>
-      <SignUp appearance={{ elements: { cardBox: "shadow-none" } }} />
-    </AuthShell>
+    <AuthView>
+      <SignUp appearance={authAppearance} />
+    </AuthView>
   );
 }

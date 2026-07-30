@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Check, Plus } from "lucide-react";
 import type { CompanyCapabilities, CompanyTag } from "@/app/api/cards/company-capabilities/route";
+import { Action, Chip } from "@/components/ui";
 
 /**
  * 같은 회사의 다른 명함이 이미 가진 역량 태그를 재사용한다.
@@ -89,13 +91,12 @@ export function CompanyTagsPanel({
           </p>
         </div>
         {missing.length > 0 && (
-          <button
-            type="button"
+          <Action
             onClick={() => onApply([...new Set([...currentCapabilities, ...tags.map((t) => t.tag)])])}
-            className="shrink-0 rounded-xl bg-brand px-3.5 py-2 text-xs font-semibold text-brand-ink"
+            className="shrink-0"
           >
             {missing.length}개 담기
-          </button>
+          </Action>
         )}
       </div>
 
@@ -103,20 +104,14 @@ export function CompanyTagsPanel({
         {tags.map(({ tag, card_count }) => {
           const on = currentCapabilities.includes(tag);
           return (
-            <button
+            <Chip
               key={tag}
-              type="button"
               onClick={() => toggle(tag)}
-              aria-pressed={on}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                on ? "bg-brand text-brand-ink" : "border border-brand/30 bg-brand-soft text-brand"
-              }`}
+              selected={on}
             >
-              {on ? `${tag} ✓` : `+ ${tag}`}
-              {card_count > 1 && (
-                <span className="ml-1 font-normal opacity-60">{card_count}</span>
-              )}
-            </button>
+              {on ? <Check aria-hidden="true" className="mr-1 size-3.5" /> : <Plus aria-hidden="true" className="mr-1 size-3.5" />}{tag}
+              {card_count > 1 ? <span className="ml-1 font-normal opacity-60">{card_count}</span> : null}
+            </Chip>
           );
         })}
       </div>

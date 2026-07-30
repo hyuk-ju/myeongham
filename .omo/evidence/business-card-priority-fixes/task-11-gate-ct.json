@@ -1,0 +1,8 @@
+{
+  "gate": "responsive-component-ct",
+  "command": "npm run test:ct -- --project=chromium",
+  "exitCode": 0,
+  "observable": "36/36 passed across 375, 768 and 1280; axe, 200% zoom, focus, overflow, settings/cards/capture/enrich/ask desktop layouts",
+  "mobileContract": "single-column and touch targets preserved below lg",
+  "desktopContract": "main/aside composition and 12-column settings grid verified"
+}

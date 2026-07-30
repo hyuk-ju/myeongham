@@ -1,0 +1,29 @@
+task=1
+scenario=deliberate_red
+invocation=npm run test -- --run tests/fixtures/intentional-red.spec.ts
+expected_exit=1
+observable=the deliberate assertion expected green and received red
+cleanup=temporary intentional-red.spec.ts removed with apply_patch
+
+scenario=restored_green
+invocation=npm run test -- --run tests/unit/baseline
+exit=0
+observable=2 test files passed; 6 tests passed
+
+scenario=untracked_sentinel_digest
+invocation=delivery:snapshot before and after adding tests/fixtures/delivery-snapshot-sentinel.ts
+exit=0
+before_tree_sha256=4dac03773eaf59170aa986653ffdb23d95c099745753144cfe9f06562d8731ab
+after_tree_sha256=c65699319697413a7cb12f6baa609f5db9bc9eb724fe20bfdc50ebe6ba18543e
+observable=the sentinel appeared in files and changed the portable tree digest
+cleanup=temporary sentinel module removed with apply_patch
+
+scenario=final_seal_negative
+invocation=npm run test -- --run tests/unit/foundation/evidence.test.ts
+exit=0
+observable=a copied plan input verified once, then mutation caused final-seal verification to fail
+
+scenario=manifest_negative_matrix
+invocation=npm run test -- --run tests/unit/foundation/manifest.test.ts
+exit=0
+observable=symlink escape, missing bytes, executable-mode drift, content digest drift, and manifest digest drift all failed closed

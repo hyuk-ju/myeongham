@@ -9,6 +9,8 @@
  * 방어적으로 하고, 이 파일 밖으로 비공식 API 지식이 새지 않게 한다.
  */
 import type { ActiveToken } from "@/lib/ai/token-store";
+import { CompanySearchError } from "@/lib/ai/openai-company-search-contract";
+import { ProviderAuthError } from "@/lib/ai/provider-types";
 
 const CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
 export const CODEX_MODEL = process.env.CODEX_MODEL || "gpt-5.5";
@@ -187,14 +189,9 @@ export async function codexWebSearch(
   });
 
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    if (res.status === 401) {
-      throw new Error("ChatGPT 인증이 만료되었습니다. 설정에서 다시 연결하세요.");
-    }
-    if (res.status === 429) {
-      throw new Error("구독 사용량 한도에 도달했습니다. 한도 리셋 후 다시 시도하세요.");
-    }
-    throw new Error(`AI 요청 실패 (${res.status}): ${text.slice(0, 300)}`);
+    if (res.status === 401 || res.status === 403) throw new ProviderAuthError();
+    if (res.status === 429) throw new CompanySearchError("rate_limited", 429);
+    throw new CompanySearchError("invalid_provider_response", 502);
   }
 
   const raw = await res.text();
@@ -238,7 +235,7 @@ export async function codexWebSearch(
   }
 
   const text = finalText ?? delta;
-  if (!text.trim()) throw new Error("ChatGPT 응답에서 출력 텍스트를 찾지 못했습니다.");
+  if (!text.trim()) throw new CompanySearchError("invalid_provider_response", 502);
 
   return { text: stripInlineCitations(text), sources: [...sources], searched, searchError };
 }

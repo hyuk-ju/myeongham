@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Action } from "@/components/ui";
 
 export interface DuplicateCandidate {
   id: string;
@@ -77,19 +78,19 @@ export function DuplicateReview({
                 <Link
                   href={`/cards/${c.id}`}
                   target="_blank"
-                  className="shrink-0 text-xs font-medium text-brand"
+                  className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center px-2 text-xs font-medium text-brand"
                 >
                   열기
                 </Link>
               </div>
 
-              <button
+              <Action
                 onClick={() => onReplace(c.id)}
                 disabled={busy}
-                className="mt-2.5 w-full rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-brand-ink disabled:opacity-60"
+                className="mt-2.5 w-full"
               >
                 이 명함을 새 명함으로 교체
-              </button>
+              </Action>
             </li>
           ))}
         </ul>
@@ -106,7 +107,7 @@ export function DuplicateReview({
                 <Link
                   href={`/cards/${c.id}`}
                   target="_blank"
-                  className="inline-block rounded-full border border-line bg-surface px-2.5 py-1 text-xs"
+                  className="inline-flex min-h-11 items-center rounded-full border border-line bg-surface px-3 py-2 text-xs"
                 >
                   {[c.name, c.title].filter(Boolean).join(" ") || "이름 미상"}
                 </Link>
@@ -120,24 +121,21 @@ export function DuplicateReview({
       )}
 
       <div className="flex gap-2">
-        <button
+        <Action
           onClick={onCancel}
           disabled={busy}
-          className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-medium disabled:opacity-60"
+          variant="secondary"
         >
           돌아가기
-        </button>
-        <button
+        </Action>
+        <Action
           onClick={onSaveNew}
           disabled={busy}
-          className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-60 ${
-            samePerson.length > 0
-              ? "border border-line bg-surface"
-              : "bg-brand text-brand-ink"
-          }`}
+          variant={samePerson.length > 0 ? "secondary" : "primary"}
+          className="flex-1"
         >
           {busy ? "저장 중…" : samePerson.length > 0 ? "그래도 새 명함으로 저장" : "저장"}
-        </button>
+        </Action>
       </div>
     </div>
   );

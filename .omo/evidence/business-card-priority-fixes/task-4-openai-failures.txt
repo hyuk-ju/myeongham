@@ -1,0 +1,4 @@
+scenario: deterministic Responses API HTTP fake failure matrix
+invocation: npm run test -- --run tests/unit/openai-company-search-failures.spec.ts
+observable: 1 test file, 30 tests passed; fake covered unconfigured/disallowed model, 400/401/403/404/409/422/429/5xx mapping, Retry-After validation/clamping, deadline reserve, transport failure, incomplete/refused/malformed-output/no-search/source-less/non-HTTPS responses, Zod bounds, duplicate normalization, bounded retries, and secret-free errors
+captured: 2026-07-29 local run

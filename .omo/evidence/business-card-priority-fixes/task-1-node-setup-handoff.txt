@@ -1,0 +1,39 @@
+task=1
+scenario=node_environment_setup_debug
+hypothesis_1=afterEach unconditionally reads document and throws after a passing Node-environment test
+hypothesis_2=jest-dom setup import itself requires document and throws before test collection
+hypothesis_3=the Node environment directive is ignored and the smoke remains under jsdom
+distinguishing_evidence=Vitest stack phase and typeof document observed inside the smoke test
+temporary_artifact=tests/unit/foundation/node-environment-handoff.spec.ts
+temporary_artifact=tests/unit/foundation/jsdom-cleanup-handoff.test.ts
+cleanup_required=true
+
+scenario=node_environment_red
+invocation=npm run test -- --run tests/unit/foundation/node-environment-handoff.spec.ts
+exit=1
+observable=test body confirmed typeof document was undefined, then vitest.setup.ts afterEach threw ReferenceError document is not defined at line 5
+
+scenario=node_and_jsdom_green
+invocation=npm run test -- --run tests/unit/foundation/node-environment-handoff.spec.ts tests/unit/foundation/jsdom-cleanup-handoff.test.ts
+exit=0
+observable=2 files and 3 tests passed; Node setup did not access document and jsdom body cleanup remained effective between tests
+
+scenario=existing_todo1_unit_suite
+invocation=npm run test -- --run tests/unit/baseline tests/unit/foundation
+exit=0
+observable=6 test files passed; 22 tests passed
+
+scenario=workspace_typecheck
+invocation=npm run typecheck
+exit=2
+observable=concurrent out-of-scope errors remain in lib/http-contracts.ts, tests/unit/http-contracts.spec.ts, tests/unit/image-signature.spec.ts, and tests/unit/openai-company-search.spec.ts
+
+scenario=changed_setup_targeted_validation
+invocation=npx tsc --noEmit --strict --skipLibCheck --module preserve --moduleResolution bundler --target ES2022 --lib ES2022,DOM vitest.setup.ts; npx eslint vitest.setup.ts
+exit=0
+observable=changed setup emitted zero TypeScript and ESLint diagnostics
+
+cleanup_completed=true
+temporary_artifacts_remaining=0
+changed_file=vitest.setup.ts
+product_behavior_changed=false

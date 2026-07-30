@@ -1,0 +1,6 @@
+{
+  "gate": "build",
+  "command": "npm run build",
+  "exitCode": 0,
+  "observable": "Next.js 16.2.12 production build passed; TypeScript passed; 29 routes generated"
+}

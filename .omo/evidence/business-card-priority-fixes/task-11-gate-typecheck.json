@@ -1,0 +1,9 @@
+{
+  "gate": "typecheck",
+  "command": "npm run typecheck -- --pretty false",
+  "startedAt": "2026-07-30T05:13:57.324Z",
+  "finishedAt": "2026-07-30T05:13:58.553Z",
+  "exitCode": 0,
+  "stdout": "\n> myeongham@0.1.0 typecheck\n> tsc --noEmit --pretty false\n\n",
+  "stderr": ""
+}

@@ -1,0 +1,7 @@
+scenario: todo-3-valid-boundaries
+invocation: npm run test -- --run tests/unit/http-contracts.spec.ts tests/unit/image-signature.spec.ts tests/unit/extract-route-boundary.spec.ts
+observable: Vitest reported 3 files passed and 15 tests passed.
+coverage: valid JPEG, PNG, WebP multipart uploads parse to detected content type and derived extension; valid JSON parses with normalized bounded fields; signed URL and draft response schemas are strict.
+coverage: downloaded valid JPEG bytes pass stored-extension and response-MIME revalidation before AI encoding.
+artifact: tests/unit/http-contracts.spec.ts, tests/unit/image-signature.spec.ts, tests/unit/extract-route-boundary.spec.ts
+post_download: app/api/drafts/[id]/extract/route.ts calls validateDownloadedImage before base64 conversion or extractCardFromImage; checked signed-URL conversion returns invalid_response instead of serializing undefined.

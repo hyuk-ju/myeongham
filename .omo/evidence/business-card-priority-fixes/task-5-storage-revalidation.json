@@ -1,0 +1,7 @@
+{
+  "scenario": "storage replacement revalidation",
+  "invocation": "QUEUE_UPSTREAM_OBSERVER=1 NODE_OPTIONS=\"--import ./tests/e2e/upstream-observer.mjs\" node scripts/run-local-production-e2e.mjs -- tests/e2e/extract-storage-revalidation.spec.ts --project=chromium",
+  "status": "credential_gate",
+  "observable": "Clerk development identity inputs are absent; executable scenario contains valid upload, authenticated Storage PUT replacement for spoofed/truncated/oversized fixtures, zero-AI assertion, fenced error-code assertion, and preserved-draft assertion",
+  "artifact": "tests/e2e/extract-storage-revalidation.spec.ts"
+}

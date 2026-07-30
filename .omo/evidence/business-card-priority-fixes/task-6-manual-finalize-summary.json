@@ -1,0 +1,37 @@
+{
+  "scenario_id": "todo6-manual-finalize",
+  "unit_invocation": "npm run test -- --run tests/unit/card-finalize-route.spec.ts tests/unit/failed-draft-review.spec.tsx",
+  "unit_result": {
+    "files": 2,
+    "tests": 7,
+    "passed": 7,
+    "failed": 0
+  },
+  "owned_lint_invocation": "npx eslint app/api/cards/route.ts components/card-review.tsx app/capture/review/review-client.tsx app/capture/card-form.tsx tests/unit/card-finalize-route.spec.ts tests/unit/failed-draft-review.spec.tsx tests/e2e/manual-finalize.spec.ts tests/e2e/finalize-retry.spec.ts",
+  "owned_lint_result": "passed",
+  "full_unit_invocation": "npm run test",
+  "full_unit_result": {
+    "files": 23,
+    "tests": 108,
+    "passed": 108,
+    "failed": 0
+  },
+  "production_e2e_invocation": "node scripts/run-local-production-e2e.mjs -- tests/e2e/manual-finalize.spec.ts tests/e2e/finalize-retry.spec.ts --project=chromium",
+  "production_e2e_result": {
+    "status": "blocked",
+    "gate": "credential_gate",
+    "detail": "missing:NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,CLERK_SECRET_KEY,CLERK_TESTING_TOKEN,CLERK_FAPI,DEV_LOGIN_USER_ID,ALLOWED_USER_IDS"
+  },
+  "e2e_spec_inventory": {
+    "list_invocation": "E2E_RUN_ROOT=<os-temp> PLAYWRIGHT_BASE_URL=http://127.0.0.1:1 npx playwright test tests/e2e/manual-finalize.spec.ts tests/e2e/finalize-retry.spec.ts --list",
+    "tests": [
+      "transaction rejection preserves the failed draft and creates no card",
+      "a dropped successful response retries to the same card id without duplicate or premature acknowledgement",
+      "failed draft retains its image and edits after failure, then finalizes once"
+    ],
+    "count": 3
+  },
+  "typed_request_boundary": "app/api/cards/route.ts imports parseCardSaveRequest and CardSaveRequest from lib/http-contracts; strict parser rejects owner/transition fields before RPC",
+  "screenshot": "not_created: credential_gate stopped before browser startup",
+  "trace_deletion_receipt": "not_applicable: no production E2E run root was created"
+}

@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-07-30T02:23:29+0900",
+  "scope": "Todo8-owned implementation and validation sources",
+  "entries": [
+    {"path":"app/(tabs)/layout.tsx","mode":"100644","sha256":"d44f54a57e3c2a3013526dba217d680b222632286112b3b128005fd2a83881f9"},
+    {"path":"app/(tabs)/page.tsx","mode":"100644","sha256":"0e4efe2c5a38795da3170ea45960284cfb92c7233217278dd763c31b3ffdd4ef"},
+    {"path":"app/(tabs)/cards/page.tsx","mode":"100644","sha256":"9f6cd9a28f708acab7086a5e4d8932261cce02c2ca5e446ad5d4f1af451e2fc8"},
+    {"path":"app/(tabs)/cards/[id]/card-detail.tsx","mode":"100644","sha256":"1f689c238684623d76e986646079566e737067b790369a12a4b4a031383d5a22"},
+    {"path":"app/(tabs)/ask/page.tsx","mode":"100644","sha256":"504170b45bee512a83d500c06cd0042a1ae7d28cf041ec097f1e2109d3f8711f"},
+    {"path":"app/(tabs)/ask/ask-client.tsx","mode":"100644","sha256":"cbb6494a79dbe51378879d97eebc161097d7b4f2c74e157a088ca3bef916f0a4"},
+    {"path":"components/bottom-nav.tsx","mode":"100644","sha256":"d16fbef95dd4d98733398571f7d2aa764af82b28bf9bd0050067efb81d24931d"},
+    {"path":"app/capture/card-form.tsx","mode":"100644","sha256":"089bc3ef117c90c95dbd2a1b6db8a23feeb08b46183498a8deb5679eadbc2551"},
+    {"path":"components/enrich-panel.tsx","mode":"100644","sha256":"e4a781f930f86fa0e0cd6b067f7fb38f6aeade67216586c39763a7872c147d19"},
+    {"path":"app/globals.css","mode":"100644","sha256":"f5d9adea6a26690723120c09fc5c37b9b1635acb688d65d6e101cbae8f8f4cf8"},
+    {"path":"tests/ct/todo8-core.spec.tsx","mode":"100644","sha256":"5c8d3b45cc19b3e5d7fcd33dfe57535f9458e9a5b442568babfd8ed86c490b64"},
+    {"path":"tests/ct/todo8-detail.spec.tsx","mode":"100644","sha256":"8130a6e3187e36086b85c532f01494f9f7f9f567165e1d2596d9c345202536e7"},
+    {"path":"tests/e2e/home-cards-ask.spec.ts","mode":"100644","sha256":"dd3572909eefc136e89babfbbb3e537222dc473f768484a73898ae7cf5078d15"},
+    {"path":"tests/e2e/home-cards-stress.spec.ts","mode":"100644","sha256":"80eca1ddd5d5580b831908b219c424d8fa9f87f939adc6085fb5d5efa4497a0f"},
+    {"path":"tests/unit/home-next-action.spec.tsx","mode":"100644","sha256":"b98d092e80ff55b98de8d6337d99d5600a8c29415722298708afbee265439d85"},
+    {"path":"tests/unit/cards-workspace.spec.tsx","mode":"100644","sha256":"420b53bd6f63986774031db2968e2ff1c3f2e208f680850f586825e726f08566"}
+  ]
+}

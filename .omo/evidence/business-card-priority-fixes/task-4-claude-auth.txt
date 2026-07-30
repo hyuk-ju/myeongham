@@ -1,0 +1,4 @@
+scenario: Claude OAuth expiry boundary and upstream 401
+invocation: npm run test -- --run tests/unit/claude-provider-errors.spec.ts
+observable: 1 test file, 3 tests passed; expired token metadata plus refresh 401, direct Claude upstream 401, and direct refresh 401 all map to auth_expired/401/retryable=false with one request and no retry
+captured: 2026-07-29 local run

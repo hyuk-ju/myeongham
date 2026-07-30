@@ -15,6 +15,7 @@ import {
   type WebSearchOutcome,
 } from "@/lib/ai/codex";
 import { claudeRequest, claudeWebSearch, CLAUDE_MODEL } from "@/lib/ai/claude";
+import { CompanySearchError } from "@/lib/ai/openai-company-search";
 
 export type { AIContent };
 export { parseJsonObject } from "@/lib/ai/codex";
@@ -57,8 +58,12 @@ export async function callAI(
   const settings = await getAISettings(supabase, ownerId);
   const config = settings[task];
 
-  // 원하는 제공자가 연결돼 있지 않으면 getValidToken 이 활성 제공자로 대체한다.
-  const token = await getValidToken(supabase, ownerId, config.provider ?? undefined);
+  if (task === "enrich" && config.provider === "openai-api") {
+    throw new CompanySearchError("provider_unconfigured", 503);
+  }
+  const preferredProvider =
+    config.provider === "openai-api" ? undefined : config.provider ?? undefined;
+  const token = await getValidToken(supabase, ownerId, preferredProvider);
   const model =
     config.provider === token.provider && config.model
       ? config.model
@@ -86,6 +91,9 @@ export async function webSearch(
   const settings = await getAISettings(supabase, ownerId);
   const config = settings[task];
 
+  if (config.provider === "openai-api") {
+    throw new Error("openai-api company search must use the Responses adapter");
+  }
   const token = await getValidToken(supabase, ownerId, config.provider ?? undefined);
   const model =
     config.provider === token.provider && config.model

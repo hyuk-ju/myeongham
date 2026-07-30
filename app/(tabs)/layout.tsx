@@ -4,7 +4,7 @@ import { BottomNav } from "@/components/bottom-nav";
 export default function TabsLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <div className="pb-safe-nav">{children}</div>
+      <div id="main-content" className="min-h-dvh pb-safe-nav">{children}</div>
       <BottomNav />
     </>
   );

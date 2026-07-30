@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { ChevronRight } from "lucide-react";
 import { isClerkNotLinkedError } from "@/lib/supabase/errors";
 
 /**
@@ -43,12 +44,12 @@ export default function CaptureError({
                 rel="noreferrer"
                 className="font-semibold underline"
               >
-                Supabase → Authentication → Third-Party Auth
+                <span className="inline-flex items-center gap-1">Supabase <ChevronRight aria-hidden="true" className="size-3.5" /> Authentication <ChevronRight aria-hidden="true" className="size-3.5" /> Third-Party Auth</span>
               </a>{" "}
               열기
             </li>
             <li>
-              <strong>Add integration → Clerk</strong> 선택
+              <strong className="inline-flex items-center gap-1">Add integration <ChevronRight aria-hidden="true" className="size-3.5" /> Clerk</strong> 선택
             </li>
             <li>
               도메인에 아래 값을 붙여넣고 저장

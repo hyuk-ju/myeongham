@@ -2,16 +2,19 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { AlertTriangle, Check, Link2, Unplug } from "lucide-react";
+import { Action, StatusBadge } from "@/components/ui";
 
 export type ProviderKey = "openai-codex" | "anthropic-claude";
 
 export interface ProviderState {
-  provider: ProviderKey;
-  connected: boolean;
-  active: boolean;
-  accountId: string | null;
-  expiresAt: string | null;
+  readonly provider: ProviderKey; readonly connected: boolean; readonly active: boolean;
+  readonly accountId: string | null; readonly expiresAt: string | null; readonly expirySeverity?: "ok" | "soon" | "expired";
 }
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> { return typeof value === "object" && value !== null; }
+async function readPayload(response: Response): Promise<Readonly<Record<string, unknown>>> { const value: unknown = await response.json(); return isRecord(value) ? value : {}; }
+function errorCode(payload: Readonly<Record<string, unknown>>, fallback: string): string { return typeof payload.error === "string" ? payload.error : fallback; }
 
 const META: Record<
   ProviderKey,
@@ -27,7 +30,7 @@ const META: Record<
 > = {
   "openai-codex": {
     label: "ChatGPT",
-    subscription: "ChatGPT Plus/Pro 구독",
+    subscription: "OAuth 계정 연결",
     api: {
       start: "/api/chatgpt/start",
       finish: "/api/chatgpt/finish",
@@ -50,7 +53,7 @@ const META: Record<
   },
   "anthropic-claude": {
     label: "Claude",
-    subscription: "Claude Pro/Max 구독",
+    subscription: "OAuth 계정 연결",
     api: {
       start: "/api/claude/start",
       finish: "/api/claude/finish",
@@ -80,13 +83,18 @@ function ProviderCard({ state }: { state: ProviderState }) {
   const [pasted, setPasted] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
 
   async function start() {
     setError(null);
     const res = await fetch(meta.api.start, { method: "POST" });
-    const json = await res.json();
+    const json = await readPayload(res);
     if (!res.ok) {
-      setError(json.error ?? "연결을 시작하지 못했습니다.");
+      setError(errorCode(json, "연결을 시작하지 못했습니다."));
+      return;
+    }
+    if (typeof json.authorizeUrl !== "string") {
+      setError("invalid_response");
       return;
     }
     window.open(json.authorizeUrl, "_blank", "noopener,noreferrer");
@@ -101,9 +109,9 @@ function ProviderCard({ state }: { state: ProviderState }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ [meta.finishKey]: pasted }),
     });
-    const json = await res.json();
+    const json = await readPayload(res);
     if (!res.ok) {
-      setError(json.error ?? "연결에 실패했습니다.");
+      setError(errorCode(json, "연결에 실패했습니다."));
       setStep("awaiting-paste");
       return;
     }
@@ -113,8 +121,8 @@ function ProviderCard({ state }: { state: ProviderState }) {
   }
 
   async function disconnect() {
-    if (!confirm(`${meta.label} 연결을 해제할까요?`)) return;
     await fetch(meta.api.disconnect, { method: "POST" });
+    setConfirmingDisconnect(false);
     router.refresh();
   }
 
@@ -128,8 +136,8 @@ function ProviderCard({ state }: { state: ProviderState }) {
     });
     setSwitching(false);
     if (!res.ok) {
-      const json = await res.json().catch(() => ({}));
-      setError(json.error ?? "전환에 실패했습니다.");
+      const json = await readPayload(res);
+      setError(errorCode(json, "전환에 실패했습니다."));
       return;
     }
     router.refresh();
@@ -147,10 +155,7 @@ function ProviderCard({ state }: { state: ProviderState }) {
           )}
         </div>
         {state.connected ? (
-          <span className="flex items-center gap-1.5 text-[13px] font-medium text-ok">
-            <span className="inline-block h-2 w-2 rounded-full bg-ok" />
-            연결됨
-          </span>
+          <StatusBadge tone="success"><Check aria-hidden="true" className="mr-1 size-3.5" />연결됨</StatusBadge>
         ) : (
           <span className="text-[13px] text-faint">{meta.subscription}</span>
         )}
@@ -163,7 +168,9 @@ function ProviderCard({ state }: { state: ProviderState }) {
           {state.expiresAt && (
             <>
               <dt className="text-soft">토큰 만료</dt>
-              <dd>{new Date(state.expiresAt).toLocaleString("ko-KR")}</dd>
+              <dd className={state.expirySeverity === "expired" ? "font-semibold text-danger" : state.expirySeverity === "soon" ? "font-semibold text-warn" : "text-soft"}>
+                {state.expirySeverity === "expired" ? "만료됨" : state.expirySeverity === "soon" ? "7일 이내 만료" : "유효"}
+              </dd>
             </>
           )}
         </dl>
@@ -172,36 +179,30 @@ function ProviderCard({ state }: { state: ProviderState }) {
       {step === "idle" && (
         <div className="flex flex-wrap gap-2">
           {!state.connected && (
-            <button
-              onClick={start}
-              className="rounded-xl bg-brand px-3.5 py-2 text-sm font-semibold text-brand-ink"
-            >
+            <Action onClick={start}>
               {meta.label} 연결하기
-            </button>
+            </Action>
           )}
           {state.connected && !state.active && (
-            <button
-              onClick={activate}
-              disabled={switching}
-              className="rounded-xl bg-brand px-3.5 py-2 text-sm font-semibold text-brand-ink disabled:opacity-50"
-            >
+            <Action onClick={activate} loading={switching}>
               {switching ? "전환 중…" : "기본 AI 로 지정"}
-            </button>
+            </Action>
           )}
           {state.connected && (
             <>
-              <button
-                onClick={start}
-                className="rounded-xl border border-line px-3.5 py-2 text-sm font-medium"
-              >
+              <Action variant="secondary" onClick={start}>
                 다시 연결
-              </button>
-              <button
-                onClick={disconnect}
-                className="rounded-xl border border-danger/30 px-3.5 py-2 text-sm font-medium text-danger"
-              >
-                해제
-              </button>
+              </Action>
+              {confirmingDisconnect ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-danger/30 bg-danger-soft p-2.5 text-sm text-danger">
+                  <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+                  <span className="mr-1">{meta.label} 연결을 해제할까요?</span>
+                  <Action variant="danger" icon={<Unplug aria-hidden="true" className="size-4" />} onClick={disconnect}>해제 확인</Action>
+                  <Action variant="quiet" onClick={() => setConfirmingDisconnect(false)}>취소</Action>
+                </div>
+              ) : (
+                <Action variant="secondary" icon={<Unplug aria-hidden="true" className="size-4" />} onClick={() => setConfirmingDisconnect(true)}>해제</Action>
+              )}
             </>
           )}
         </div>
@@ -219,44 +220,36 @@ function ProviderCard({ state }: { state: ProviderState }) {
             value={pasted}
             onChange={(e) => setPasted(e.target.value)}
             placeholder={meta.pastePlaceholder}
+            autoComplete="off"
             rows={3}
             className="w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 font-mono text-xs outline-none focus:border-brand"
           />
 
           <div className="flex gap-2">
-            <button
-              onClick={finish}
-              disabled={!pasted.trim() || step === "saving"}
-              className="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-brand-ink disabled:opacity-50"
-            >
+            <Action disabled={!pasted.trim()} loading={step === "saving"} onClick={finish}>
               {step === "saving" ? "연결 중…" : "연결 완료"}
-            </button>
-            <button
+            </Action>
+            <Action
+              variant="secondary"
               onClick={() => {
                 setStep("idle");
                 setError(null);
+                setPasted("");
               }}
-              className="rounded-xl border border-line px-4 py-2.5 text-sm font-medium"
             >
               취소
-            </button>
+            </Action>
           </div>
         </div>
       )}
 
       {error && (
-        <p className="rounded-xl bg-danger-soft px-3.5 py-2.5 text-sm text-danger">{error}</p>
+        <p role="alert" className="flex items-center gap-2 rounded-xl bg-danger-soft px-3.5 py-2.5 text-sm text-danger"><Link2 aria-hidden="true" className="size-4" />{error}</p>
       )}
     </div>
   );
 }
 
 export function ConnectAI({ providers }: { providers: ProviderState[] }) {
-  return (
-    <div className="space-y-3">
-      {providers.map((p) => (
-        <ProviderCard key={p.provider} state={p} />
-      ))}
-    </div>
-  );
+  return <div className="space-y-3">{providers.map((provider) => <ProviderCard key={provider.provider} state={provider} />)}</div>;
 }

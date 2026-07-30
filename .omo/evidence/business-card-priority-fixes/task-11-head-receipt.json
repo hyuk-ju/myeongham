@@ -1,0 +1,11 @@
+{
+  "status": "frozen",
+  "head": "607f8dc73874afa92a50bb394b93c6950ab3c60b",
+  "sourceTreeSha256": "bf90ce88d206a7778ac3978d1f23ccb2f76585f646159e051e0a7b0d14a27ce3",
+  "sourceManifestSha256": "0bb9cc6e244569f2463bc3b2a4880870109fc79c71ad1ad4faf0d271d0cd47a9",
+  "semanticIndexSha256": "9587e49327f147cfbe61a8212495a82f0c959ee0fb8138414a0a65f4b40ef713",
+  "cachedDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "worktreeStatusSha256": "6d4235ea759406fd6776bf76af818bc765099d0134a2db05a87e237de6fa355c",
+  "remoteMutation": false,
+  "stagingOrCommitPerformed": false
+}

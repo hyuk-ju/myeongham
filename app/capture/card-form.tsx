@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Check, ChevronDown, Plus, X } from "lucide-react";
 import { normalizePhoneOrNull } from "@/lib/phone";
 
 export interface CardDraft {
@@ -37,10 +38,11 @@ export const EMPTY_DRAFT: CardDraft = {
   notes: null, met_at: null, met_context: null,
 };
 
-/** 화면에 노출할 필드와 라벨. 자주 쓰는 순서대로 — 8번째까지 기본 노출. */
-const FIELDS: { key: keyof CardDraft; label: string; type?: string }[] = [
-  { key: "company", label: "회사" },
-  { key: "name", label: "이름" },
+type FieldConfig = Readonly<{ key: keyof CardDraft; label: string; type?: string; required?: boolean }>;
+
+const FIELDS: readonly FieldConfig[] = [
+  { key: "company", label: "회사", required: true },
+  { key: "name", label: "이름", required: true },
   { key: "title", label: "직함" },
   { key: "department", label: "부서" },
   { key: "mobile", label: "휴대폰", type: "tel" },
@@ -59,15 +61,17 @@ const FIELDS: { key: keyof CardDraft; label: string; type?: string }[] = [
   { key: "met_context", label: "만난 자리 (전시회, 미팅 등)" },
 ];
 
+const REQUIRED_FIELDS = FIELDS.filter((field) => field.required);
+
 interface Props {
   draft: CardDraft;
   onChange: (draft: CardDraft) => void;
   knownTags: string[];
-  /** 상세 화면에서는 처음부터 모든 필드를 편다. */
   expanded?: boolean;
+  compactLayout?: boolean;
 }
 
-export function CardForm({ draft, onChange, knownTags, expanded = false }: Props) {
+export function CardForm({ draft, onChange, knownTags, expanded = false, compactLayout = false }: Props) {
   const [tagInput, setTagInput] = useState("");
   const [showAll, setShowAll] = useState(expanded);
 
@@ -76,141 +80,89 @@ export function CardForm({ draft, onChange, knownTags, expanded = false }: Props
   }
 
   function addTag(tag: string) {
-    const t = tag.trim();
-    if (!t || draft.capabilities.includes(t)) return;
-    set("capabilities", [...draft.capabilities, t]);
+    const value = tag.trim();
+    if (!value || draft.capabilities.includes(value)) return;
+    set("capabilities", [...draft.capabilities, value]);
     setTagInput("");
   }
 
-  // 기본 8개 + 값이 채워진 나머지 필드(해외 명함의 영문명·Taxcode 등)는 항상 보여준다.
-  const visible = showAll
-    ? FIELDS
-    : FIELDS.filter((f, i) => i < 8 || !!draft[f.key]);
-  const suggestions = knownTags.filter((t) => !draft.capabilities.includes(t)).slice(0, 8);
-
-  const inputCls =
-    "rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[16px] shadow-sm outline-none focus:border-brand";
+  const visible = showAll ? FIELDS : FIELDS.filter((field, index) => index < 8 || Boolean(draft[field.key]));
+  const requiredMissing = REQUIRED_FIELDS.filter((field) => !String(draft[field.key] ?? "").trim());
+  const suggestions = knownTags.filter((tag) => !draft.capabilities.includes(tag)).slice(0, 8);
+  const lowConfidence = draft.confidence > 0 && draft.confidence < 0.7;
+  const fieldGridClass = compactLayout ? "mt-4 grid gap-4 lg:grid-cols-2" : "mt-4 grid gap-4 sm:grid-cols-2";
 
   return (
-    <div className="space-y-5">
-      {draft.confidence > 0 && draft.confidence < 0.7 && (
-        <p className="rounded-xl bg-warn-soft px-3.5 py-2.5 text-sm text-warn">
-          신뢰도가 낮습니다 ({Math.round(draft.confidence * 100)}%). 값을 특히 꼼꼼히 확인하세요.
-        </p>
-      )}
-
-      <div className="grid gap-3">
-        {visible.map(({ key, label, type }) => (
-          <label key={key} className="grid gap-1.5">
-            <span className="text-xs font-semibold text-soft">{label}</span>
-            <input
-              type={type ?? "text"}
-              inputMode={type === "tel" ? "tel" : undefined}
-              value={(draft[key] as string) ?? ""}
-              onChange={(e) => set(key, (e.target.value || null) as never)}
-              onBlur={
-                type === "tel"
-                  ? (e) => {
-                      // 사용자가 +82… 를 직접 입력해도 저장 전에 010-… 으로 맞춘다.
-                      const normalized = normalizePhoneOrNull(e.target.value);
-                      if (normalized !== (draft[key] as string | null)) {
-                        set(key, normalized as never);
-                      }
-                    }
-                  : undefined
-              }
-              className={inputCls}
-            />
-          </label>
-        ))}
-      </div>
-
-      {!showAll && (
-        <button
-          type="button"
-          onClick={() => setShowAll(true)}
-          className="text-sm font-medium text-brand"
-        >
-          나머지 항목 보기 ↓
-        </button>
-      )}
-
-      {/* 역량 태그 — 이 앱의 검색 품질을 좌우하는 부분 */}
-      <div className="space-y-2 rounded-2xl border border-line bg-surface p-4 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-xs font-semibold text-soft">
-            역량 태그 <span className="font-normal text-faint">— 이 회사가 뭘 만드는지</span>
-            {draft.capabilities.length > 0 && (
-              <span className="font-normal text-faint"> ({draft.capabilities.length})</span>
-            )}
-          </span>
-          {/* 웹 보강이 태그를 여러 개 담았을 때 하나씩 지우지 않아도 되게 한다 */}
-          {draft.capabilities.length > 0 && (
-            <button
-              type="button"
-              onClick={() => set("capabilities", [])}
-              className="shrink-0 text-xs font-medium text-soft underline"
-            >
-              전부 지우기
-            </button>
-          )}
+    <div className={compactLayout ? "space-y-5 [overflow-wrap:break-word] [word-break:keep-all]" : "space-y-5 [overflow-wrap:anywhere]"}>
+      <section aria-labelledby="required-fields-title" className="rounded-2xl border border-line bg-surface p-3 shadow-sm sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-soft">VERIFY FIRST</p>
+            <h2 id="required-fields-title" className="mt-1 text-lg font-semibold tracking-tight">필수 확인</h2>
+            <p className="mt-1 text-sm text-soft">회사와 이름은 저장 전에 확인해 주세요.</p>
+          </div>
+          {requiredMissing.length > 0 ? <span className="rounded-lg bg-warn-soft px-2.5 py-1.5 text-xs font-semibold text-warn">미입력 {requiredMissing.length}개</span> : <span className="inline-flex items-center gap-1 rounded-lg bg-ok-soft px-2.5 py-1.5 text-xs font-semibold text-ok"><Check aria-hidden="true" className="size-3.5" />확인됨</span>}
         </div>
+        {lowConfidence ? <p role="status" className="mt-3 rounded-xl bg-warn-soft px-3.5 py-2.5 text-sm text-warn">전체 OCR 확신도가 {Math.round(draft.confidence * 100)}%입니다. 낮은 확신 필드를 한 번 더 확인하세요.</p> : null}
+        <div className={fieldGridClass}>
+          {REQUIRED_FIELDS.map((field) => <FieldInput key={field.key} field={field} draft={draft} onChange={set} lowConfidence={lowConfidence} compactLayout={compactLayout} />)}
+        </div>
+      </section>
 
-        {draft.capabilities.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {draft.capabilities.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => set("capabilities", draft.capabilities.filter((t) => t !== tag))}
-                className="rounded-full bg-brand px-3 py-1.5 text-xs font-medium text-brand-ink"
-              >
-                {tag} ✕
-              </button>
-            ))}
+      <section aria-labelledby="additional-fields-title" className="rounded-2xl border border-line bg-surface p-3 shadow-sm sm:p-5">
+        <div className={compactLayout ? "flex flex-col items-start gap-2" : "flex items-start justify-between gap-3"}>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-soft">CARD DETAILS</p>
+            <h2 id="additional-fields-title" className="mt-1 text-lg font-semibold tracking-tight">추가 정보</h2>
           </div>
-        )}
+          <span className="rounded-lg bg-surface-hover px-2.5 py-1.5 text-xs font-medium text-soft">OCR · 직접 수정 가능</span>
+        </div>
+        <div className={fieldGridClass}>
+          {visible.filter((field) => !field.required).map((field) => <FieldInput key={field.key} field={field} draft={draft} onChange={set} lowConfidence={lowConfidence} compactLayout={compactLayout} />)}
+        </div>
+        {!showAll ? <button type="button" onClick={() => setShowAll(true)} className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2">나머지 항목 보기 <ChevronDown aria-hidden="true" className="size-4" /></button> : null}
+      </section>
 
-        <input
-          value={tagInput}
-          onChange={(e) => setTagInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === ",") {
-              e.preventDefault();
-              addTag(tagInput);
-            }
-          }}
-          onBlur={() => tagInput.trim() && addTag(tagInput)}
-          placeholder="예: 정밀가공 · 입력 후 Enter"
-          className="w-full rounded-xl border border-line bg-paper px-3.5 py-2.5 text-[16px] outline-none focus:border-brand"
-        />
-
-        {suggestions.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {suggestions.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => addTag(tag)}
-                className="rounded-full border border-line px-3 py-1.5 text-xs text-soft"
-              >
-                + {tag}
-              </button>
-            ))}
+      <section aria-labelledby="capabilities-title" className="rounded-2xl border border-line bg-surface p-3 shadow-sm sm:p-5">
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 id="capabilities-title" className="text-base font-semibold">역량 태그</h2>
+            <p className="mt-1 text-sm text-soft">검색에 사용할 회사의 제품·서비스를 추가하세요.</p>
           </div>
-        )}
-      </div>
+          {draft.capabilities.length > 0 ? <button type="button" onClick={() => set("capabilities", [])} className="min-h-11 whitespace-nowrap px-2 text-xs font-semibold text-soft underline focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2">전부 지우기</button> : null}
+        </div>
+        {draft.capabilities.length > 0 ? <div className="mt-3 flex flex-wrap gap-2">{draft.capabilities.map((tag) => <button key={tag} type="button" onClick={() => set("capabilities", draft.capabilities.filter((item) => item !== tag))} className="inline-flex min-h-11 max-w-full min-w-0 items-center gap-1 whitespace-normal [overflow-wrap:anywhere] [word-break:break-word] rounded-full bg-brand px-3 py-1.5 text-xs font-medium text-brand-ink focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2">{tag}<X aria-hidden="true" className="size-3.5 shrink-0" /></button>)}</div> : null}
+        <div className="mt-3 flex gap-2">
+          <input aria-label="역량 태그 입력" value={tagInput} onChange={(event) => setTagInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === ",") { event.preventDefault(); addTag(tagInput); } }} onBlur={() => { if (tagInput.trim()) addTag(tagInput); }} placeholder="예: 정밀가공 · Enter로 추가" className="ui-field-control min-w-0 flex-1" />
+          <button type="button" onClick={() => addTag(tagInput)} aria-label="역량 태그 추가" className="ui-action ui-action-secondary size-11 shrink-0 p-0"><Plus aria-hidden="true" className="size-4" /></button>
+        </div>
+        {suggestions.length > 0 ? <div className="mt-3 flex flex-wrap gap-2">{suggestions.map((tag) => <button key={tag} type="button" onClick={() => addTag(tag)} className="inline-flex min-h-11 max-w-full min-w-0 items-center gap-1 whitespace-normal [overflow-wrap:anywhere] [word-break:break-word] rounded-full border border-line px-3 py-1.5 text-xs font-medium text-soft hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2"><Plus aria-hidden="true" className="size-3.5 shrink-0" />{tag}</button>)}</div> : null}
+      </section>
 
-      <label className="grid gap-1.5">
-        <span className="text-xs font-semibold text-soft">메모</span>
-        <textarea
-          value={draft.notes ?? ""}
-          onChange={(e) => set("notes", e.target.value || null)}
-          rows={2}
-          placeholder="예: 견적 빠름, 소량 제작 가능"
-          className="resize-none rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[16px] shadow-sm outline-none focus:border-brand"
-        />
+      <label className="grid gap-2 rounded-2xl border border-line bg-surface p-3 shadow-sm sm:p-5" htmlFor="card-notes">
+        <span className="text-base font-semibold">메모</span>
+        <span className="text-sm text-soft">명함에 없는 맥락이나 후속 메모를 남겨두세요.</span>
+        <textarea id="card-notes" value={draft.notes ?? ""} onChange={(event) => set("notes", event.target.value || null)} rows={3} placeholder="예: 견적 빠름, 소량 제작 가능" className="ui-field-control resize-y" />
+        <span className="text-xs text-soft">직접 입력</span>
       </label>
     </div>
+  );
+}
+
+function FieldInput({ field, draft, onChange, lowConfidence, compactLayout }: Readonly<{ field: FieldConfig; draft: CardDraft; onChange: <K extends keyof CardDraft>(key: K, value: CardDraft[K]) => void; lowConfidence: boolean; compactLayout: boolean }>) {
+  const value = draft[field.key];
+  const textValue = typeof value === "string" ? value : "";
+  const missing = field.required && textValue.trim().length === 0;
+  const normalized = field.type === "tel" && textValue.includes("-");
+  const sourceLabel = missing ? "비어 있음" : normalized ? "정규화" : lowConfidence ? "OCR · 낮은 확신" : "OCR";
+  const sourceClass = missing || lowConfidence ? "bg-warn-soft text-warn" : normalized ? "bg-brand-soft text-brand" : "bg-surface-hover text-soft";
+  const fieldId = `card-${String(field.key)}`;
+
+  return (
+    <label className="grid min-w-0 gap-2" htmlFor={fieldId}>
+      <span className={`${compactLayout ? "flex flex-col items-start gap-1 text-xs" : "flex flex-wrap items-center justify-between gap-2 text-sm"} font-semibold text-ink`}><span>{field.label}{field.required ? <span className="ml-1 text-danger" aria-hidden="true">*</span> : null}</span><span className={`rounded-md px-2 py-1 text-[11px] font-medium ${sourceClass}`}>{sourceLabel}</span></span>
+      <input id={fieldId} type={field.type ?? "text"} inputMode={field.type === "tel" ? "tel" : undefined} required={field.required} aria-required={field.required || undefined} aria-invalid={missing || undefined} value={textValue} onChange={(event) => onChange(field.key, (event.target.value || null) as CardDraft[typeof field.key])} onBlur={field.type === "tel" ? (event) => { const normalizedValue = normalizePhoneOrNull(event.target.value); if (normalizedValue !== (draft[field.key] as string | null)) onChange(field.key, normalizedValue as CardDraft[typeof field.key]); } : undefined} className={`${compactLayout ? "text-xs tracking-tight sm:text-sm" : ""} ui-field-control min-w-0`} />
+      {missing ? <span className="text-xs font-medium text-danger">저장 전에 입력해 주세요.</span> : null}
+    </label>
   );
 }

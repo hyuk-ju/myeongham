@@ -1,286 +1,187 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { EnrichView, type EnrichFilter, type EnrichViewRow, type EnrichStatus } from "./enrich-view";
 import type { EnrichSuggestion } from "@/components/enrich-panel";
 
 export interface CompanyNeed {
-  company: string;
-  missing: number;
-  total: number;
+  readonly company: string;
+  readonly missing: number;
+  readonly total: number;
 }
 
-type Status = "waiting" | "searching" | "ready" | "failed" | "applied";
+type Row = EnrichViewRow;
 
-interface Row extends CompanyNeed {
-  status: Status;
-  suggestion: EnrichSuggestion | null;
-  picked: string[];
-  error: string | null;
-  updated: number;
+const STOP_CODES = new Set(["provider_unconfigured", "rate_limited", "auth_expired"]);
+
+function errorCode(payload: unknown): string {
+  if (typeof payload !== "object" || payload === null || !("code" in payload)) return "upstream_failure";
+  const code = payload.code;
+  return typeof code === "string" ? code : "upstream_failure";
 }
 
-/**
- * 일괄 보강 — 역량 태그가 빈 명함을 회사 단위로 채운다.
- *
- * 태그가 없는 명함은 질문에 안 걸려서 사실상 없는 명함이 된다. 등록할 때
- * 건너뛰었거나 검색이 실패한 것들을 여기서 한 번에 정리한다.
- *
- * 검색은 **한 번에 하나씩** 돈다 — 구독 OAuth 에 429 재시도 계층이 없어서
- * 동시에 부르면 한도만 빨리 태운다. 적용은 자동으로 하지 않는다.
- */
-export function EnrichClient({ companies }: { companies: CompanyNeed[] }) {
-  const [rows, setRows] = useState<Row[]>(() =>
-    companies.map((c) => ({
-      ...c,
-      status: "waiting" as Status,
-      suggestion: null,
-      picked: [],
-      error: null,
-      updated: 0,
-    })),
-  );
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseSuggestion(payload: unknown): EnrichSuggestion | null {
+  const candidate = isRecord(payload) && "suggestion" in payload ? payload.suggestion : payload;
+  if (!isRecord(candidate)) return null;
+  const capabilities = candidate.capabilities;
+  const sources = candidate.sources;
+  if (
+    !(typeof candidate.industry === "string" || candidate.industry === null) ||
+    !(typeof candidate.summary === "string" || candidate.summary === null) ||
+    typeof candidate.confident !== "boolean" ||
+    !Array.isArray(capabilities) ||
+    !capabilities.every((tag): tag is string => typeof tag === "string") ||
+    !Array.isArray(sources) ||
+    !sources.every((source) => isRecord(source) && typeof source.url === "string" && typeof source.title === "string")
+  ) return null;
+  return {
+    industry: candidate.industry,
+    capabilities,
+    summary: candidate.summary,
+    confident: candidate.confident,
+    sources: sources.map((source) => ({ url: source.url, title: source.title })),
+  };
+}
+
+export function EnrichClient({ companies }: Readonly<{ companies: readonly CompanyNeed[] }>) {
+  const [rows, setRows] = useState<readonly Row[]>(() => companies.map((company) => ({ ...company, status: "waiting" as const, suggestion: null, picked: [], error: null, updated: 0 })));
   const [running, setRunning] = useState(false);
-  const [stopped, setStopped] = useState<string | null>(null);
-
-  const listRef = useRef<Row[]>(rows);
+  const [stoppedCode, setStoppedCode] = useState<string | null>(null);
+  const [filter, setFilter] = useState<EnrichFilter>("all");
+  const rowsRef = useRef(rows);
   const alive = useRef(true);
-  const stoppedRef = useRef(false);
+  const stopped = useRef(false);
+  const retryOnly = useRef(false);
+  const retryTargets = useRef<ReadonlySet<string>>(new Set());
+  const activeCompany = useRef<string | null>(null);
+  const controller = useRef<AbortController | null>(null);
 
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
+      controller.current?.abort();
     };
   }, []);
 
-  const publish = useCallback((next: Row[]) => {
-    listRef.current = next;
+  const publish = useCallback((next: readonly Row[]) => {
+    rowsRef.current = next;
     if (alive.current) setRows(next);
   }, []);
 
-  const patch = useCallback(
-    (company: string, next: Partial<Row>) => {
-      publish(listRef.current.map((r) => (r.company === company ? { ...r, ...next } : r)));
-    },
-    [publish],
-  );
+  const patch = useCallback((company: string, changes: Partial<Row>) => {
+    publish(rowsRef.current.map((row) => row.company === company ? { ...row, ...changes } : row));
+  }, [publish]);
 
-  async function searchAll() {
+  const search = useCallback(async () => {
     if (running) return;
     setRunning(true);
-    stoppedRef.current = false;
-    setStopped(null);
-
+    stopped.current = false;
+    setStoppedCode(null);
     try {
-      for (;;) {
-        if (!alive.current || stoppedRef.current) break;
-        const next = listRef.current.find((r) => r.status === "waiting");
+      while (alive.current && !stopped.current) {
+        const next = rowsRef.current.find((row) => row.status === "waiting" && (!retryOnly.current || retryTargets.current.has(row.company)));
         if (!next) break;
-
+        activeCompany.current = next.company;
         patch(next.company, { status: "searching", error: null });
+        const requestController = new AbortController();
+        controller.current = requestController;
         try {
-          const res = await fetch("/api/enrich", {
+          const response = await fetch("/api/enrich", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ company: next.company }),
+            signal: requestController.signal,
           });
-          const json = await res.json();
-
-          if (!res.ok) {
-            const stop =
-              typeof json.error === "string" &&
-              (json.error.includes("사용량 한도") || json.error.includes("인증이 만료"));
-            patch(next.company, { status: "failed", error: json.error ?? "검색 실패" });
-            if (stop) {
-              stoppedRef.current = true;
-              if (alive.current) setStopped(json.error);
+          const payload: unknown = await response.json();
+          if (!response.ok) {
+            const code = errorCode(payload);
+            patch(next.company, { status: "failed", error: code });
+            if (STOP_CODES.has(code)) {
+              stopped.current = true;
+              if (alive.current) setStoppedCode(code);
             }
-            continue;
+          } else {
+            const suggestion = parseSuggestion(payload);
+            patch(next.company, suggestion ? {
+              status: "ready",
+              suggestion,
+              picked: [],
+              error: null,
+            } : { status: "failed", error: "invalid_response" });
           }
-
-          const suggestion = json as EnrichSuggestion;
-          patch(next.company, {
-            status: "ready",
-            suggestion,
-            // 회사를 특정했다고 한 경우에만 미리 골라둔다. 적용은 사용자가 누른다.
-            picked: suggestion.confident ? suggestion.capabilities : [],
-          });
-        } catch {
-          patch(next.company, { status: "failed", error: "네트워크 오류" });
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError") {
+            if (!stopped.current) patch(next.company, { status: "waiting" });
+          } else {
+            patch(next.company, { status: "failed", error: "upstream_failure" });
+          }
+        } finally {
+          controller.current = null;
+          activeCompany.current = null;
         }
       }
     } finally {
+      retryOnly.current = false;
+      retryTargets.current = new Set();
       if (alive.current) setRunning(false);
     }
-  }
+  }, [patch, running]);
 
-  async function apply(row: Row) {
+  const stop = useCallback(() => {
+    stopped.current = true;
+    controller.current?.abort();
+    const company = activeCompany.current;
+    if (company) patch(company, { status: "waiting", error: null });
+    setStoppedCode("stopped");
+    setRunning(false);
+  }, [patch]);
+
+  const retryFailed = useCallback(() => {
+    const failed = new Set(rowsRef.current.filter((row) => row.status === "failed").map((row) => row.company));
+    retryTargets.current = failed;
+    retryOnly.current = failed.size > 0;
+    publish(rowsRef.current.map((row) => row.status === "failed" ? { ...row, status: "waiting" as EnrichStatus, error: null } : row));
+    setStoppedCode(null);
+  }, [publish]);
+
+  const toggle = useCallback((row: Row, tag: string) => {
+    const picked = row.picked.includes(tag) ? row.picked.filter((item) => item !== tag) : [...row.picked, tag];
+    patch(row.company, { picked });
+  }, [patch]);
+
+  const apply = useCallback(async (row: Row) => {
     if (!row.picked.length) return;
-    const res = await fetch("/api/cards/bulk-capabilities", {
+    const response = await fetch("/api/cards/bulk-capabilities", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        company: row.company,
-        capabilities: row.picked,
-        industry: row.suggestion?.industry ?? null,
-      }),
+      body: JSON.stringify({ company: row.company, capabilities: row.picked, industry: row.suggestion?.industry ?? null }),
     });
-    const json = await res.json();
-    if (!res.ok) {
-      patch(row.company, { error: json.error ?? "적용에 실패했습니다." });
+    const payload: unknown = await response.json();
+    if (!response.ok) {
+      patch(row.company, { error: errorCode(payload) });
       return;
     }
-    patch(row.company, { status: "applied", updated: json.updated ?? 0, error: null });
-  }
-
-  function toggle(row: Row, tag: string) {
-    patch(row.company, {
-      picked: row.picked.includes(tag)
-        ? row.picked.filter((t) => t !== tag)
-        : [...row.picked, tag],
-    });
-  }
-
-  if (!rows.length) {
-    return (
-      <div className="space-y-4 rounded-2xl border border-line bg-surface p-5 text-center shadow-sm">
-        <p className="text-sm text-soft">역량 태그가 빠진 명함이 없습니다.</p>
-        <Link
-          href="/"
-          className="inline-block rounded-xl bg-brand px-4 py-2.5 text-sm font-medium text-brand-ink"
-        >
-          홈으로
-        </Link>
-      </div>
-    );
-  }
-
-  const waiting = rows.filter((r) => r.status === "waiting").length;
+    const updated = typeof payload === "object" && payload !== null && "updated" in payload && typeof payload.updated === "number" ? payload.updated : 0;
+    patch(row.company, { status: "applied", updated, error: null });
+  }, [patch]);
 
   return (
-    <div className="space-y-4 pb-24">
-      <p className="rounded-xl bg-brand-soft px-3.5 py-2.5 text-sm text-brand">
-        태그가 빠진 명함이 <strong className="font-semibold">{rows.length}개 회사</strong>에
-        있습니다. 웹에서 찾은 태그는 <strong className="font-semibold">고른 것만</strong>{" "}
-        그 회사 명함 전체에 적용됩니다.
-      </p>
-
-      {stopped && (
-        <p className="rounded-xl bg-warn-soft px-3.5 py-2.5 text-sm text-warn">{stopped}</p>
-      )}
-
-      {waiting > 0 && (
-        <button
-          type="button"
-          onClick={searchAll}
-          disabled={running}
-          className="w-full rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-brand-ink disabled:opacity-60"
-        >
-          {running ? "검색 중… (한 곳씩)" : `${waiting}개 회사 웹에서 찾기`}
-        </button>
-      )}
-
-      <div className="space-y-3">
-        {rows.map((row) => (
-          <section
-            key={row.company}
-            className="space-y-2.5 rounded-2xl border border-line bg-surface p-4 shadow-sm"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold">{row.company}</h2>
-                <p className="mt-0.5 text-xs text-soft">
-                  명함 {row.total}장 중 {row.missing}장에 태그 없음
-                </p>
-              </div>
-              <StatusBadge row={row} />
-            </div>
-
-            {row.error && <p className="text-xs text-danger">{row.error}</p>}
-
-            {row.suggestion?.summary && (
-              <p className="text-xs text-soft">{row.suggestion.summary}</p>
-            )}
-
-            {row.status === "ready" && row.suggestion && (
-              <>
-                {row.suggestion.confident === false && (
-                  <p className="rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn">
-                    회사를 특정하지 못했습니다. 동명 회사일 수 있으니 확인 후 고르세요.
-                  </p>
-                )}
-
-                {row.suggestion.capabilities.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {row.suggestion.capabilities.map((tag) => {
-                      const on = row.picked.includes(tag);
-                      return (
-                        <button
-                          key={tag}
-                          type="button"
-                          onClick={() => toggle(row, tag)}
-                          aria-pressed={on}
-                          className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                            on
-                              ? "bg-brand text-brand-ink"
-                              : "border border-brand/30 bg-brand-soft text-brand"
-                          }`}
-                        >
-                          {on ? `${tag} ✓` : `+ ${tag}`}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-xs text-faint">제안할 태그를 찾지 못했습니다.</p>
-                )}
-
-                {row.picked.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => apply(row)}
-                    className="rounded-xl bg-brand px-3.5 py-2 text-xs font-semibold text-brand-ink"
-                  >
-                    {row.picked.length}개를 {row.company} 명함 {row.total}장에 적용
-                  </button>
-                )}
-              </>
-            )}
-
-            {row.status === "applied" && (
-              <p className="rounded-lg bg-ok-soft px-3 py-2 text-xs font-medium text-ok">
-                명함 {row.updated}장에 적용했습니다.
-              </p>
-            )}
-          </section>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function StatusBadge({ row }: { row: Row }) {
-  if (row.status === "searching") {
-    return (
-      <span className="flex shrink-0 items-center gap-1.5 text-xs text-soft">
-        <span className="h-3 w-3 animate-spin rounded-full border-2 border-brand border-t-transparent" />
-        찾는 중
-      </span>
-    );
-  }
-  const map: Record<Status, { text: string; cls: string } | null> = {
-    waiting: { text: "대기", cls: "bg-surface-hover text-soft" },
-    searching: null,
-    ready: { text: "선택 대기", cls: "bg-brand-soft text-brand" },
-    failed: { text: "실패", cls: "bg-danger-soft text-danger" },
-    applied: { text: "적용됨", cls: "bg-ok-soft text-ok" },
-  };
-  const badge = map[row.status];
-  if (!badge) return null;
-  return (
-    <span className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold ${badge.cls}`}>
-      {badge.text}
-    </span>
+    <EnrichView
+      rows={rows}
+      running={running}
+      stoppedCode={stoppedCode}
+      filter={filter}
+      onFilterChange={setFilter}
+      onStart={search}
+      onStop={stop}
+      onRetryFailed={retryFailed}
+      onToggle={toggle}
+      onApply={apply}
+    />
   );
 }

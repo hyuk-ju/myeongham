@@ -8,6 +8,7 @@
  */
 import type { ActiveToken } from "@/lib/ai/token-store";
 import type { AIContent, WebSearchOutcome } from "@/lib/ai/codex";
+import { ProviderAuthError } from "@/lib/ai/provider-types";
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 export const CLAUDE_MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-5";
@@ -52,9 +53,7 @@ async function postMessages(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    if (res.status === 401) {
-      throw new Error("Claude 인증이 만료되었습니다. 설정에서 다시 연결하세요.");
-    }
+    if (res.status === 401) throw new ProviderAuthError();
     if (res.status === 429) {
       throw new Error("Claude 구독 사용량 한도에 도달했습니다. 한도 리셋 후 다시 시도하세요.");
     }

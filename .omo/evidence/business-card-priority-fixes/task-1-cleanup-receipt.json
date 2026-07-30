@@ -1,0 +1,20 @@
+{
+  "task": 1,
+  "status": "clean",
+  "removed": [
+    "tests/fixtures/intentional-red.spec.ts",
+    "tests/fixtures/delivery-snapshot-sentinel.ts",
+    "tests/ct/.cache",
+    "test-results"
+  ],
+  "repoAuthStateFiles": 0,
+  "repoTicketReferenceFiles": 0,
+  "remoteMutationAttempted": false,
+  "sourceManifest": {
+    "version": 2,
+    "files": 180,
+    "deletions": 0,
+    "treeSha256": "ec14cc306833b1ac7ce97724c34b0fa729df0fbfb5761697cbd003064ff0077c",
+    "manifestSha256": "beaf8865629109ffacd54c4958389fb6b028dbc5dd4eedd7777dac0cbd52fc0b"
+  }
+}

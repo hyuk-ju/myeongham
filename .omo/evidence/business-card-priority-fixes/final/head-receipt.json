@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "status": "frozen",
+  "head": "607f8dc73874afa92a50bb394b93c6950ab3c60b",
+  "indexSha256": "9587e49327f147cfbe61a8212495a82f0c959ee0fb8138414a0a65f4b40ef713",
+  "cachedDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "worktreeStatusSha256": "6d4235ea759406fd6776bf76af818bc765099d0134a2db05a87e237de6fa355c",
+  "realWorktreeCommitted": false,
+  "stagingPerformed": false,
+  "remoteMutation": false
+}

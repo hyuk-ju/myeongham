@@ -1,0 +1,45 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { ConnectAI, type ProviderState } from "@/app/(tabs)/settings/connect-ai";
+import { SettingsView } from "@/app/(tabs)/settings/settings-view";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+
+const provider: ProviderState = {
+  provider: "openai-codex",
+  connected: true,
+  active: true,
+  accountId: "ac•••42",
+  expiresAt: "2030-01-01T00:00:00.000Z",
+  expirySeverity: "ok",
+};
+
+describe("settings provider transparency", () => {
+  it("separates OAuth status from server OpenAI availability without key material", () => {
+    render(
+      <SettingsView
+        providers={[provider]}
+        catalog={[]}
+        initial={{ extract: { provider: null, model: null }, ask: { provider: null, model: null }, enrich: { provider: "openai-api", model: null } }}
+        defaultLabel="ChatGPT"
+        openAI={{ configured: false, model: "gpt-5.6" }}
+        oauthContent={<ConnectAI providers={[provider]} />}
+        modelContent={<div>models</div>}
+        accountContent={<div>account</div>}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "사용자 OAuth 연결" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "서버 소유 OpenAI API" })).toBeVisible();
+    expect(screen.getByText("설정 필요")).toBeVisible();
+    expect(screen.getByText("ac•••42")).toBeVisible();
+    expect(screen.queryByText(/OPENAI_API_KEY/)).toBeNull();
+  });
+
+  it("uses inline confirmation instead of browser confirm for disconnect", () => {
+    render(<ConnectAI providers={[provider]} />);
+    expect(screen.queryByRole("button", { name: "해제 확인" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "해제" }));
+    expect(screen.getByRole("button", { name: "해제 확인" })).toBeVisible();
+  });
+});

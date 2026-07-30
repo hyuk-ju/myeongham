@@ -1,0 +1,6 @@
+scenario_id=todo6-finalize-retry-boundary
+deterministic_invocation=npm run test -- --run tests/unit/card-finalize-route.spec.ts tests/unit/failed-draft-review.spec.tsx
+deterministic_observable=7 targeted tests passed; full suite 23 files/108 tests passed; strict card-save parsing rejects owner/transition fields, route maps busy to HTTP 409, missing/cross-owner supersedes to not_found/404, and failed review retains editable values after an ambiguous network response
+production_invocation=node scripts/run-local-production-e2e.mjs -- tests/e2e/finalize-retry.spec.ts --project=chromium
+production_observable={"status":"blocked","gate":"credential_gate"}
+rollback_e2e_trace=not_created; credential gate prevented any authenticated run and no trace was persisted

@@ -2,99 +2,99 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { ArrowLeft, ClipboardCheck } from "lucide-react";
+import { StateBlock } from "@/components/ui";
 import { useDraftQueue } from "@/lib/use-draft-queue";
+import type { DraftQueueActions, DraftQueueSnapshot } from "@/lib/draft-queue-state";
 import type { DraftRow } from "@/lib/drafts";
 import { EMPTY_DRAFT, type CardDraft } from "@/app/capture/card-form";
 import { CardReview } from "@/components/card-review";
 
-/**
- * 대기열 검토 — 분석이 끝난 명함을 한 장씩 확인하고 저장한다.
- *
- * 저장하면 그 draft 를 치우고 자동으로 다음 장이 올라온다. 촬영 화면과 같은
- * 훅을 쓰므로, 여기 있는 동안에도 아직 안 읽은 사진이 뒤에서 계속 분석된다.
- */
-export function ReviewClient({ knownTags }: { knownTags: string[] }) {
-  const queue = useDraftQueue();
-  const { drafts, loading } = queue;
+export type ReviewViewProps = Readonly<{
+  snapshot: DraftQueueSnapshot;
+  actions: DraftQueueActions;
+  knownTags: readonly string[];
+}>;
 
-  const ready = drafts.filter((d) => d.status === "extracted");
-  const current = ready[0] ?? null;
-  const waiting = drafts.filter((d) => d.status === "pending").length;
+export function ReviewView({ snapshot, actions, knownTags }: ReviewViewProps) {
+  const reviewable = [...snapshot.ready, ...snapshot.failed];
+  const current = reviewable[0] ?? null;
+  const waiting = snapshot.waiting.length + snapshot.processing.length;
 
-  if (loading) {
-    return <p className="text-sm text-soft">대기열을 불러오는 중…</p>;
+  if (snapshot.loading) {
+    return <StateBlock state="loading" title="대기열을 불러오는 중" description="보관된 원본과 분석 상태를 확인하고 있습니다." />;
   }
 
-  if (!current) {
+  if (current === null) {
     return (
-      <div className="space-y-4 rounded-2xl border border-line bg-surface p-5 text-center shadow-sm">
-        <p className="text-sm text-soft">
-          {waiting > 0
-            ? `아직 읽는 중인 사진이 ${waiting}장 있습니다. 잠시 후 다시 오세요.`
-            : drafts.length > 0
-              ? "검토할 수 있는 명함이 없습니다. 실패한 사진은 촬영 화면에서 다시 시도할 수 있습니다."
-              : "검토할 명함이 없습니다."}
-        </p>
-        <Link
-          href="/capture"
-          className="inline-block rounded-xl bg-brand px-4 py-2.5 text-sm font-medium text-brand-ink"
-        >
-          촬영 화면으로
-        </Link>
-      </div>
+      <StateBlock
+        state={waiting > 0 ? "info" : "empty"}
+        title={waiting > 0 ? "아직 읽는 중인 명함이 있습니다" : "검토할 명함이 없습니다"}
+        description={waiting > 0 ? `${waiting}장은 원본을 보존한 채 처리 중입니다. 완료되면 이 화면에 나타납니다.` : "촬영 화면에서 명함을 추가하면 여기서 내용을 확인할 수 있습니다."}
+        action={<Link href="/capture" className="ui-action ui-action-primary"><ArrowLeft aria-hidden="true" className="size-4" />촬영 화면으로</Link>}
+      />
     );
   }
 
   return (
-    // key 로 다음 장에서 폼 상태가 새로 시작된다 — effect 로 갈아끼울 필요가 없다.
-    <ReviewOne
+    <ReviewEditor
       key={current.id}
       row={current}
       knownTags={knownTags}
-      readyCount={ready.length}
+      readyCount={reviewable.length}
       waiting={waiting}
-      onSaved={() => void queue.complete(current.id)}
-      onDiscard={() => void queue.discard(current.id)}
+      actions={actions}
     />
   );
 }
 
-function ReviewOne({
-  row,
-  knownTags,
-  readyCount,
-  waiting,
-  onSaved,
-  onDiscard,
-}: {
+export function ReviewClient({ knownTags }: { knownTags: string[] }) {
+  const queue = useDraftQueue();
+  return <ReviewView snapshot={queue} actions={queue} knownTags={knownTags} />;
+}
+
+function ReviewEditor({ row, knownTags, readyCount, waiting, actions }: Readonly<{
   row: DraftRow;
-  knownTags: string[];
+  knownTags: readonly string[];
   readyCount: number;
   waiting: number;
-  onSaved: () => void;
-  onDiscard: () => void;
-}) {
-  const [draft, setDraft] = useState<CardDraft>(() => ({
-    ...EMPTY_DRAFT,
-    ...(row.extracted ?? {}),
-  }));
+  actions: DraftQueueActions;
+}>) {
+  const [draft, setDraft] = useState<CardDraft>(() => ({ ...EMPTY_DRAFT, ...(row.extracted ?? {}) }));
 
   return (
     <CardReview
       imagePath={row.image_path}
       imageUrl={row.image_url}
-      initialEnrich={row.enrich}
+      draftId={row.id}
+      draftStatus={row.status === "failed" ? "failed" : "extracted"}
+      draftError={row.error}
+      initialEnrich={row.enrich ? {
+        industry: row.enrich.industry,
+        capabilities: row.enrich.capabilities,
+        summary: row.enrich.summary,
+        confident: row.enrich.confident,
+        sources: row.enrich.sources,
+      } : null}
       draft={draft}
       onChange={setDraft}
-      knownTags={knownTags}
-      // 저장 성공 — 이미지는 명함이 가져갔으므로 Storage 는 남긴다.
-      onSaved={onSaved}
-      onDiscard={onDiscard}
+      knownTags={[...knownTags]}
+      onSaved={(cardId) => {
+        if (isUuid(cardId)) return actions.acknowledgeFinalized(row.id, cardId);
+        return Promise.resolve();
+      }}
+      onDiscard={() => void actions.discard(row.id)}
+      onRetry={() => void actions.retry(row.id)}
       header={
-        <p className="rounded-xl bg-brand-soft px-3.5 py-2.5 text-sm text-brand">
-          확인 대기 {readyCount}장{waiting > 0 && ` · 읽는 중 ${waiting}장`}
-        </p>
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-brand-soft px-3.5 py-3 text-sm text-brand">
+          <span className="flex min-w-0 items-center gap-2"><ClipboardCheck aria-hidden="true" className="size-4 shrink-0" /><span className="truncate">확인 대기 {readyCount}장{waiting > 0 ? ` · 처리 중 ${waiting}장` : ""}</span></span>
+          <Link href="/capture" className="shrink-0 text-xs font-semibold underline underline-offset-2">사진 더 담기</Link>
+        </div>
       }
     />
   );
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

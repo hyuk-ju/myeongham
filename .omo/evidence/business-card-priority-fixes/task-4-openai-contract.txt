@@ -1,0 +1,4 @@
+scenario: deterministic Responses API HTTP fake happy path
+invocation: npm run test -- --run tests/unit/openai-company-search.spec.ts
+observable: 1 test file, 1 test passed; fake request asserted /v1/responses, Bearer auth, gpt-5.6, web_search, required tool choice, source include, store=false, strict four-field schema, normalized HTTPS sources. Combined Todo4 targeted suite: 5 files, 45 tests passed.
+captured: 2026-07-29 local run

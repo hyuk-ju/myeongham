@@ -1,0 +1,8 @@
+{
+  "scenario_id": "todo6-evidence-sanitization",
+  "scan_invocation": "node scripts/evidence-scan.mjs --include .omo/evidence/business-card-priority-fixes/task-6-manual-finalize-summary.json --include .omo/evidence/business-card-priority-fixes/task-6-rollback.txt --include .omo/evidence/business-card-priority-fixes/task-6-trace-deletion-receipt.json",
+  "scan_result": { "status": "ok", "files": 3 },
+  "audit_invocation": "node scripts/evidence-audit.mjs --root .omo/evidence/business-card-priority-fixes",
+  "audit_result": { "status": "ok", "files": 41 },
+  "secret_or_pii_values_persisted": false
+}

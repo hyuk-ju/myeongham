@@ -1,0 +1,42 @@
+{
+  "task": "11",
+  "status": "deterministic_pass_external_gates_named",
+  "scenarios": [
+    {
+      "name": "oauth-focused-contracts",
+      "invocation": "npm test -- --run tests/unit/oauth-enrich-restoration.spec.ts tests/unit/oauth-company-search-fail-closed.spec.ts tests/unit/oauth-enrich-settings-ui.spec.tsx tests/unit/provider-routing.spec.ts tests/unit/enrich-routes.spec.ts",
+      "observable": "5 files, 17 tests passed; routing, stable secret-free errors, UI disclosure, alternatives and queue-stop behavior"
+    },
+    {
+      "name": "synthetic-recovery-and-oauth-visual",
+      "invocation": "npm run test:ct -- tests/ct/core-routes.spec.tsx tests/ct/adversarial-core-states.spec.tsx tests/ct/enrich-settings.spec.tsx --project=chromium",
+      "observable": "12 passed at 375/768/1280; 200% zoom, actionable errors, no overflow, OAuth warning and no-auto-fallback copy"
+    },
+    {
+      "name": "authenticated-production-journey-and-oauth-live",
+      "invocation": "npm run test:e2e -- tests/e2e/full-journey.spec.ts --project=chromium",
+      "observable": "missing CLERK_TESTING_TOKEN and CLERK_FAPI; no authenticated OAuth token/data-plane available",
+      "classification": "credential_gate"
+    },
+    {
+      "name": "local-db-and-concurrency",
+      "invocation": "npm run test:db:concurrency -- --scenario full",
+      "observable": "Docker executable or daemon unavailable",
+      "classification": "docker_gate"
+    },
+    {
+      "name": "official-openai-live",
+      "invocation": "npm run test:openai:live -- --company OpenAI",
+      "observable": "missing_openai_api_key",
+      "classification": "blocked_external"
+    },
+    {
+      "name": "remote-supabase",
+      "observable": "no authorized linked-project mutation or migration was attempted",
+      "classification": "blocked_external"
+    }
+  ],
+  "secretsOrPii": "none",
+  "remoteMutation": false,
+  "deploymentOrGitDelivery": false
+}

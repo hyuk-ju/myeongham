@@ -10,13 +10,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { refreshTokenSet, type TokenSet } from "@/lib/ai/openai-oauth";
 import { refreshClaudeTokenSet } from "@/lib/ai/anthropic-oauth";
+import type { OAuthAIProvider } from "@/lib/ai/provider-types";
 
 const REFRESH_MARGIN_MS = 60_000; // 만료 60초 전부터 갱신
 const STALE_LOCK_MS = 30_000; // 30초 넘게 잡혀 있는 락은 죽은 것으로 간주
 const WAIT_POLL_MS = 700;
 const WAIT_MAX_MS = 15_000;
 
-export type AIProvider = "openai-codex" | "anthropic-claude";
+export type AIProvider = OAuthAIProvider;
 
 export interface TokenRow {
   owner_id: string;
@@ -155,7 +156,7 @@ function toActive(row: TokenRow): ActiveToken {
 }
 
 /**
- * 유효한 access token 을 반환한다. preferred 제공자가 연결돼 있으면 그것을,
+ * 유효한 access token 을 반환한다. preferred 제공자가 지정되면 반드시 그것을,
  * 아니면 활성 제공자를 쓴다. 만료가 임박했으면 갱신하되, CAS 락을 딴
  * 인스턴스만 실제 갱신을 수행하고 나머지는 결과를 대기한다.
  */
@@ -170,10 +171,11 @@ export async function getValidToken(
       "AI 계정이 연결되어 있지 않습니다. 설정 화면에서 먼저 연결하세요.",
     );
   }
-  const row =
-    (preferred && rows.find((r) => r.provider === preferred)) ??
-    rows.find((r) => r.is_active) ??
-    rows[0];
+  const preferredRow = preferred ? rows.find((r) => r.provider === preferred) : null;
+  if (preferred && !preferredRow) {
+    throw new Error("선택한 AI 제공자가 연결되어 있지 않습니다.");
+  }
+  const row = preferredRow ?? rows.find((r) => r.is_active) ?? rows[0];
   if (isFresh(row)) return toActive(row);
 
   // --- CAS: 락 선점 시도 -----------------------------------------------

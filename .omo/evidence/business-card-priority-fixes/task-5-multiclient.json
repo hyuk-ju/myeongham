@@ -1,0 +1,7 @@
+{
+  "scenario": "same-owner multiclient extraction",
+  "invocation": "QUEUE_UPSTREAM_OBSERVER=1 NODE_OPTIONS=\"--import ./tests/e2e/upstream-observer.mjs\" node scripts/run-local-production-e2e.mjs -- tests/e2e/multiclient-queue.spec.ts --project=chromium",
+  "status": "credential_gate",
+  "observable": "Clerk development identity inputs are absent; executable scenario contains upload, two authenticated contexts, one held upstream request, busy=409 assertion, refetch-safe response, and one-upstream-call assertion",
+  "artifact": "tests/e2e/multiclient-queue.spec.ts"
+}

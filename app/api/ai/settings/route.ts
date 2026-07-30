@@ -1,48 +1,92 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
 import { getAuthorizedUser } from "@/lib/auth";
-import { saveAISettings, type AISettings } from "@/lib/ai/settings-store";
+import { saveAISettings, type StoredAISettings } from "@/lib/ai/settings-store";
 import { MODEL_CATALOG } from "@/lib/ai/llm";
-import type { AIProvider } from "@/lib/ai/token-store";
 
-const PROVIDERS = Object.keys(MODEL_CATALOG) as AIProvider[];
+const OAUTH_CONFIG_SCHEMA = z
+  .object({
+    provider: z.enum(["openai-codex", "anthropic-claude"]).nullable(),
+    model: z.string().nullable(),
+  })
+  .strict()
+  .superRefine((config, context) => {
+    if (config.provider === null && config.model !== null) {
+      context.addIssue({ code: "custom", message: "model_requires_provider" });
+      return;
+    }
+    if (
+      config.provider !== null &&
+      config.model !== null &&
+      !MODEL_CATALOG[config.provider].models.some((model) => model.id === config.model)
+    ) {
+      context.addIssue({ code: "custom", message: "invalid_model" });
+    }
+  });
 
-/** 제공자/모델 조합이 카탈로그에 있는지 확인 — 임의 문자열 저장을 막는다. */
-function parseTaskConfig(raw: unknown): { provider: AIProvider | null; model: string | null } {
-  const value = (raw ?? {}) as { provider?: unknown; model?: unknown };
-  const provider = PROVIDERS.includes(value.provider as AIProvider)
-    ? (value.provider as AIProvider)
-    : null;
-  if (!provider) return { provider: null, model: null };
+const ENRICH_CONFIG_SCHEMA = z
+  .object({
+    provider: z.enum(["openai-codex", "anthropic-claude", "openai-api"]).nullable(),
+    model: z.string().nullable(),
+  })
+  .strict()
+  .superRefine((config, context) => {
+    if (config.provider === null && config.model !== null) {
+      context.addIssue({ code: "custom", message: "model_requires_provider" });
+      return;
+    }
+    if (config.provider === "openai-api" && config.model !== null) {
+      context.addIssue({ code: "custom", message: "openai_model_is_server_owned" });
+      return;
+    }
+    if (config.provider !== null && config.provider !== "openai-api" && config.model !== null &&
+      !MODEL_CATALOG[config.provider].models.some((model) => model.id === config.model)) {
+      context.addIssue({ code: "custom", message: "invalid_model" });
+    }
+  })
+  .transform((config) =>
+    config.provider === "openai-api" ? { provider: "openai-api" as const, model: null } : config,
+  );
 
-  const model =
-    typeof value.model === "string" &&
-    MODEL_CATALOG[provider].models.some((m) => m.id === value.model)
-      ? value.model
-      : null;
-  return { provider, model };
+export const AI_SETTINGS_REQUEST_SCHEMA = z
+  .object({
+    extract: OAUTH_CONFIG_SCHEMA,
+    ask: OAUTH_CONFIG_SCHEMA,
+    enrich: ENRICH_CONFIG_SCHEMA,
+  })
+  .strict();
+
+function invalidInput() {
+  return NextResponse.json(
+    { code: "invalid_input", error: "invalid_input" },
+    { status: 400 },
+  );
 }
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthorizedUser();
   if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const body = (await request.json()) as {
-    extract?: unknown;
-    ask?: unknown;
-    enrich?: unknown;
-  };
-  const settings: AISettings = {
-    extract: parseTaskConfig(body.extract),
-    ask: parseTaskConfig(body.ask),
-    enrich: parseTaskConfig(body.enrich),
-  };
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return invalidInput();
+  }
+  const parsed = AI_SETTINGS_REQUEST_SCHEMA.safeParse(body);
+  if (!parsed.success) return invalidInput();
 
+  const settings: StoredAISettings = {
+    extract: parsed.data.extract,
+    ask: parsed.data.ask,
+    enrich: parsed.data.enrich,
+  };
   try {
     await saveAISettings(auth.supabase, auth.user.id, settings);
     return NextResponse.json({ ok: true, settings });
-  } catch (err) {
+  } catch {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "저장에 실패했습니다." },
+      { code: "upstream_failure", error: "upstream_failure" },
       { status: 500 },
     );
   }

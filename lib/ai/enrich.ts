@@ -12,15 +12,23 @@
  * '회사 정보 검색' 항목이 정하고, 실제 분기는 llm.ts 의 webSearch 가 맡는다.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { z } from "zod";
 import { webSearch, parseJsonObject } from "@/lib/ai/llm";
+import { getEnrichSettings } from "@/lib/ai/settings-store";
+import { serverEnv } from "@/lib/env";
+import {
+  CompanySearchError,
+  searchCompanyWithOpenAI,
+  type EnrichSource,
+} from "@/lib/ai/openai-company-search";
 
 export interface EnrichSuggestion {
-  industry: string | null;
-  capabilities: string[];
-  summary: string | null;
+  readonly industry: string | null;
+  readonly capabilities: readonly string[];
+  readonly summary: string | null;
   /** 회사를 특정하지 못했으면 false — 이때는 저장을 권하지 않는다 */
-  confident: boolean;
-  sources: string[];
+  readonly confident: boolean;
+  readonly sources: readonly EnrichSource[];
 }
 
 const INSTRUCTIONS = `당신은 기업 정보 조사원입니다. 주어진 회사를 웹에서 찾아 "이 회사가 무엇을 만들고 취급하는지" 를 정리합니다.
@@ -78,6 +86,15 @@ const INSTRUCTIONS = `당신은 기업 정보 조사원입니다. 주어진 회�
 /** 화면에 그대로 보이는 목록이라 개수를 제한한다. 프롬프트는 4~7개를 요구한다. */
 const MAX_CAPABILITIES = 8;
 
+const OAUTH_ENRICH_RESPONSE_SCHEMA = z
+  .object({
+    industry: z.string().trim().min(1).max(500).nullable(),
+    capabilities: z.array(z.string().trim().min(1).max(80)).max(MAX_CAPABILITIES),
+    summary: z.string().trim().min(1).max(500).nullable(),
+    confident: z.boolean(),
+  })
+  .strict();
+
 /**
  * 표기만 다른 중복을 없앤다 — "프레스 가공" 과 "프레스가공", "PCB 장비" 와
  * "pcb장비" 는 검색상 같은 태그다. 먼저 나온 표기를 남긴다 (모델이 대표 표기를
@@ -114,6 +131,21 @@ export async function enrichCompany(
   ownerId: string,
   input: EnrichInput,
 ): Promise<EnrichSuggestion> {
+  const settings = await getEnrichSettings(supabase, ownerId);
+  if (settings.provider === "openai-api") {
+    const result = await searchCompanyWithOpenAI(
+      {
+        company: input.company,
+        companyEn: input.companyEn ?? null,
+        website: input.website ?? null,
+        address: input.address ?? null,
+        taxCode: input.taxCode ?? null,
+      },
+      { apiKey: serverEnv.openaiApiKey, model: serverEnv.openaiSearchModel },
+    );
+    return result.suggestion;
+  }
+
   const hints = [
     `회사명: ${input.company}`,
     input.companyEn && input.companyEn !== input.company
@@ -137,23 +169,42 @@ export async function enrichCompany(
 
   // 검색이 아예 안 됐으면 모델이 기억으로 답한 것이므로 결과를 쓰면 안 된다.
   if (!searched) {
-    throw new Error(
-      searchError === "too_many_requests"
-        ? "웹 검색 사용량 한도에 걸렸습니다. 잠시 후 다시 시도하세요."
-        : "웹 검색이 실행되지 않아 조사를 완료하지 못했습니다. 잠시 후 다시 시도하세요.",
+    throw new CompanySearchError(
+      searchError === "too_many_requests" ? "rate_limited" : "invalid_provider_response",
+      searchError === "too_many_requests" ? 429 : 502,
     );
   }
 
-  const parsed = parseJsonObject(text);
-  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  let rawParsed: Record<string, unknown>;
+  try {
+    rawParsed = parseJsonObject(text);
+  } catch {
+    throw new CompanySearchError("invalid_provider_response", 502);
+  }
+  const parsed = OAUTH_ENRICH_RESPONSE_SCHEMA.safeParse(rawParsed);
+  if (!parsed.success) throw new CompanySearchError("invalid_provider_response", 502);
+
+  const normalizedSources: EnrichSource[] = [];
+  const seenSources = new Set<string>();
+  for (const source of sources) {
+    try {
+      const url = new URL(source);
+      if (url.protocol !== "https:" || seenSources.has(url.toString())) continue;
+      seenSources.add(url.toString());
+      normalizedSources.push({ url: url.toString(), title: url.hostname.slice(0, 200) });
+    } catch {
+      continue;
+    }
+    if (normalizedSources.length === 10) break;
+  }
+
+  if (normalizedSources.length === 0) throw new CompanySearchError("invalid_provider_response", 502);
 
   return {
-    industry: str(parsed.industry),
-    capabilities: Array.isArray(parsed.capabilities)
-      ? dedupeTags(parsed.capabilities)
-      : [],
-    summary: str(parsed.summary),
-    confident: parsed.confident === true,
-    sources,
+    industry: parsed.data.industry,
+    capabilities: dedupeTags(parsed.data.capabilities),
+    summary: parsed.data.summary,
+    confident: parsed.data.confident,
+    sources: normalizedSources,
   };
 }

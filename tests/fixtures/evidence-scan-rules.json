@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "requiredRuleIds": [
+    "private_key",
+    "bearer_token",
+    "clerk_secret",
+    "clerk_publishable_value",
+    "openai_secret",
+    "jwt",
+    "remote_supabase_url",
+    "email",
+    "clerk_user_id",
+    "ticket_query"
+  ]
+}

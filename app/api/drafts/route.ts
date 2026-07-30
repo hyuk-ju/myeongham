@@ -1,9 +1,13 @@
-import { NextResponse, type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import { getAuthorizedUser } from "@/lib/auth";
-import { DRAFT_COLUMNS, withImageUrls } from "@/lib/drafts";
-
-const MAX_BYTES = 6 * 1024 * 1024; // 클라이언트에서 리사이즈하므로 넉넉한 상한
+import { DRAFT_COLUMNS, withImageUrlsResult } from "@/lib/drafts";
+import {
+  errorResponse,
+  jsonResponse,
+  parseDraftRecords,
+  parseDraftUploadRequest,
+} from "@/lib/http-contracts";
 
 /**
  * 사진을 대기열에 담는다 — Storage 업로드 + pending 행 생성까지만.
@@ -15,59 +19,56 @@ const MAX_BYTES = 6 * 1024 * 1024; // 클라이언트에서 리사이즈하므�
  */
 export async function POST(request: NextRequest) {
   const auth = await getAuthorizedUser();
-  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!auth) return errorResponse("unauthorized");
   const { user, supabase } = auth;
 
-  const form = await request.formData();
-  const file = form.get("image");
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "이미지가 없습니다." }, { status: 400 });
-  }
-  if (file.size > MAX_BYTES) {
-    return NextResponse.json({ error: "이미지가 너무 큽니다." }, { status: 413 });
-  }
+  const upload = await parseDraftUploadRequest(request);
+  if (!upload.ok) return errorResponse(upload.code);
 
-  const bytes = Buffer.from(await file.arrayBuffer());
-  const mime = file.type || "image/jpeg";
-  const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
-  const imagePath = `${user.id}/${randomUUID()}.${ext}`;
+  const imagePath = `${user.id}/${randomUUID()}.${upload.value.extension}`;
 
   const { error: uploadError } = await supabase.storage
     .from("card-images")
-    .upload(imagePath, bytes, { contentType: mime, upsert: false });
+    .upload(imagePath, upload.value.bytes, { contentType: upload.value.contentType, upsert: false });
   if (uploadError) {
-    return NextResponse.json(
-      { error: `이미지 저장 실패: ${uploadError.message}` },
-      { status: 500 },
-    );
+    return errorResponse("invalid_response");
   }
 
   const { data, error } = await supabase
     .from("card_drafts")
-    .insert({ owner_id: user.id, image_path: imagePath, status: "pending" })
+    .insert({ owner_id: user.id, image_path: imagePath })
     .select(DRAFT_COLUMNS)
     .single();
 
   if (error) {
     // 행을 못 만들면 방금 올린 이미지는 고아가 된다. 바로 치운다.
     await supabase.storage.from("card-images").remove([imagePath]);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return errorResponse("invalid_response");
   }
 
-  const [row] = await withImageUrls(supabase, [data]);
-  return NextResponse.json(row, { status: 201 });
+  const records = parseDraftRecords([data]);
+  if (!records.ok) return errorResponse(records.code);
+  const rows = await withImageUrlsResult(supabase, records.value);
+  if (!rows.ok) return errorResponse(rows.code);
+  const row = rows.value[0];
+  if (row === undefined) return errorResponse("invalid_response");
+  return jsonResponse(row, 201);
 }
 
 /** 내 대기열 전체. 앱을 다시 열었을 때 이어서 처리하기 위한 것이다. */
 export async function GET() {
   const auth = await getAuthorizedUser();
-  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!auth) return errorResponse("unauthorized");
 
   const { data, error } = await auth.supabase
     .from("card_drafts")
     .select(DRAFT_COLUMNS)
     .order("created_at", { ascending: true });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ drafts: await withImageUrls(auth.supabase, data ?? []) });
+  if (error) return errorResponse("invalid_response");
+  const records = parseDraftRecords(data ?? []);
+  if (!records.ok) return errorResponse(records.code);
+  const rows = await withImageUrlsResult(auth.supabase, records.value);
+  if (!rows.ok) return errorResponse(rows.code);
+  return jsonResponse({ drafts: rows.value });
 }

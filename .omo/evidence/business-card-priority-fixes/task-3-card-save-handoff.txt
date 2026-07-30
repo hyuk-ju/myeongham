@@ -1,0 +1,7 @@
+scenario: todo-3-card-save-boundary-handoff
+invocation: npm run test -- --run tests/unit/http-contracts.spec.ts tests/unit/image-signature.spec.ts tests/unit/extract-route-boundary.spec.ts
+observable: Vitest reported 3 files passed and 17 tests passed.
+contract: lib/http-contracts.ts exports CardSaveRequest and parseCardSaveRequest; strict input rejects unknown owner/transition fields, invalid UUIDs, overlong fields, invalid capability source, and out-of-range confidence.
+handoff: Todo6 may consume parseCardSaveRequest(value) and CardSaveRequest without editing this parser or sending owner/transition columns to the RPC.
+lint: npx eslint lib/http-contracts.ts tests/unit/http-contracts.spec.ts exited 0.
+workspace_typecheck: npx tsc --noEmit remains blocked by unrelated concurrent diagnostics outside this handoff; no parser/test diagnostics reported.

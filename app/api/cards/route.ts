@@ -1,77 +1,101 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthorizedUser } from "@/lib/auth";
+import { parseCardSaveRequest, type CardSaveRequest } from "@/lib/http-contracts";
 import { normalizePhoneOrNull } from "@/lib/phone";
 
-const TEXT_FIELDS = [
-  "name", "name_en", "title", "department", "company", "company_en",
-  "email", "email2", "website", "address", "postal_code", "tax_code",
-  "raw_text", "industry", "notes", "met_context",
-] as const;
+const INVALID_INPUT = { error: "invalid_input" } as const;
 
-/** 국가번호 표기를 현지 표기로 정규화해서 저장하는 필드 */
-const PHONE_FIELDS = ["phone", "mobile", "mobile2", "fax"] as const;
+type RpcEnvelope = {
+  readonly code: string;
+  readonly cardId: string | null;
+  readonly created: boolean | null;
+};
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthorizedUser();
   if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { user, supabase } = auth;
 
-  const body = (await request.json()) as Record<string, unknown>;
-
-  if (typeof body.image_path !== "string" || !body.image_path.startsWith(`${user.id}/`)) {
-    return NextResponse.json({ error: "잘못된 이미지 경로입니다." }, { status: 400 });
+  const body = await readJson(request);
+  if (!body.ok) return NextResponse.json(INVALID_INPUT, { status: 400 });
+  const parsed = parseCardSaveRequest(body.value);
+  if (!parsed.ok) return NextResponse.json({ error: parsed.code }, { status: 400 });
+  const { draft_id: draftId, supersedes_id: supersedesId, image_path: imagePath, ...card } = normalizeCardPayload(parsed.value);
+  if (draftId !== null) {
+    const result = await supabase.rpc("finalize_card_draft", {
+      p_draft_id: draftId,
+      p_card: card,
+      p_supersedes_id: supersedesId,
+    });
+    return rpcResponse(result, "finalized");
   }
 
-  const row: Record<string, unknown> = {
-    owner_id: user.id,
-    image_path: body.image_path,
-    status: "confirmed",
+  if (typeof imagePath !== "string" || !isOwnedImagePath(imagePath, user.id)) {
+    return NextResponse.json({ error: "invalid_input" }, { status: 400 });
+  }
+  const result = await supabase.rpc("save_card", {
+    p_card: card,
+    p_image_path: imagePath,
+    p_supersedes_id: supersedesId,
+  });
+  return rpcResponse(result, "saved");
+}
+
+function normalizeCardPayload(input: CardSaveRequest): CardSaveRequest {
+  return {
+    ...input,
+    phone: normalizePhoneOrNull(input.phone),
+    mobile: normalizePhoneOrNull(input.mobile),
+    mobile2: normalizePhoneOrNull(input.mobile2),
+    fax: normalizePhoneOrNull(input.fax),
+    capabilities_source: input.capabilities.length > 0 ? input.capabilities_source : null,
   };
+}
 
-  for (const key of TEXT_FIELDS) {
-    const v = body[key];
-    row[key] = typeof v === "string" && v.trim() ? v.trim() : null;
+function isOwnedImagePath(path: string, ownerId: string): boolean {
+  return path.startsWith(`${ownerId}/`) && path.length > ownerId.length + 1 && !path.includes("\\");
+}
+
+async function readJson(request: Request): Promise<{ readonly ok: true; readonly value: unknown } | { readonly ok: false }> {
+  try {
+    return { ok: true, value: await request.json() };
+  } catch (error) {
+    if (error instanceof SyntaxError || error instanceof TypeError) return { ok: false };
+    throw error;
   }
-  for (const key of PHONE_FIELDS) {
-    row[key] = normalizePhoneOrNull(body[key]);
+}
+
+async function rpcResponse(
+  result: { readonly data: unknown; readonly error: { readonly message?: string } | null },
+  successCode: "saved" | "finalized",
+) {
+  if (result.error) return NextResponse.json({ error: "invalid_response" }, { status: 500 });
+  const envelope = parseRpcEnvelope(result.data);
+  if (envelope === null) return NextResponse.json({ error: "invalid_response" }, { status: 500 });
+  if (envelope.code === "not_found") return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (envelope.code === "busy") return NextResponse.json({ error: "busy", code: "busy" }, { status: 409 });
+  if (envelope.code === "invalid_input" || envelope.code === "invalid_state") {
+    return NextResponse.json({ error: envelope.code }, { status: 400 });
   }
-
-  row.capabilities = Array.isArray(body.capabilities)
-    ? [...new Set(body.capabilities.filter((t): t is string => typeof t === "string" && !!t.trim()).map((t) => t.trim()))]
-    : [];
-  // 근거는 호출부가 알려준다 — 웹 검색으로 담았으면 'web', 아니면 직접 고른 것.
-  // (예전에는 body 를 무시하고 항상 'manual' 로 덮어써서 근거가 틀렸다)
-  const source = body.capabilities_source === "web" ? "web" : "manual";
-  row.capabilities_source = (row.capabilities as string[]).length ? source : null;
-
-  const conf = Number(body.confidence);
-  row.confidence = Number.isFinite(conf) ? Math.min(1, Math.max(0, conf)) : null;
-
-  const metAt = body.met_at;
-  row.met_at = typeof metAt === "string" && metAt.trim() ? metAt : null;
-
-  // 같은 사람의 이전 명함을 대체하는 경우 (직함 변경, 이직 등).
-  // 중복 판단은 저장 전 /api/cards/duplicates 에서 사용자가 이미 내렸다.
-  const supersedesId =
-    typeof body.supersedes_id === "string" && body.supersedes_id ? body.supersedes_id : null;
-  row.supersedes_id = supersedesId;
-
-  const { data, error } = await supabase.from("cards").insert(row).select("id").single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  if (supersedesId) {
-    // 이전 명함은 이력으로만 남긴다 (삭제하지 않는다 — 옛 연락처도 단서가 된다).
-    const { error: supersedeError } = await supabase
-      .from("cards")
-      .update({ is_current: false })
-      .eq("id", supersedesId);
-    if (supersedeError) {
-      return NextResponse.json(
-        { id: data.id, warning: `저장했지만 이전 명함 정리에 실패했습니다: ${supersedeError.message}` },
-        { status: 207 },
-      );
-    }
+  if (envelope.code === "unauthorized") return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (envelope.code !== successCode || envelope.cardId === null || !isUuid(envelope.cardId)) {
+    return NextResponse.json({ error: envelope.code === successCode ? "invalid_response" : envelope.code }, { status: 500 });
   }
+  return NextResponse.json({ id: envelope.cardId, created: envelope.created ?? true });
+}
 
-  return NextResponse.json({ id: data.id });
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function parseRpcEnvelope(value: unknown): RpcEnvelope | null {
+  const row = Array.isArray(value) ? value[0] : value;
+  if (typeof row !== "object" || row === null || Array.isArray(row)) return null;
+  const record = Object.fromEntries(Object.entries(row));
+  if (typeof record.code !== "string") return null;
+  return {
+    code: record.code,
+    cardId: typeof record.card_id === "string" ? record.card_id : null,
+    created: typeof record.created === "boolean" ? record.created : null,
+  };
 }

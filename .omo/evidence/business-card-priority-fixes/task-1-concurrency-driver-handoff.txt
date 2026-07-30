@@ -1,0 +1,8 @@
+task=1
+scenario=todo2_concurrency_driver_handoff
+invocation=node -e package-script exact-string assertion
+exit=0
+observable=package.json scripts.test:db:concurrency equals node scripts/test-db-concurrency.mjs
+changed_file=package.json
+lockfile_changed_for_handoff=false
+product_behavior_changed=false

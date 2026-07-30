@@ -7,6 +7,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AIProvider } from "@/lib/ai/token-store";
+import type { EnrichProvider } from "@/lib/ai/provider-types";
 
 export type AITask = "extract" | "ask" | "enrich";
 
@@ -18,7 +19,18 @@ export interface AITaskConfig {
 export interface AISettings {
   extract: AITaskConfig;
   ask: AITaskConfig;
-  enrich: AITaskConfig;
+  enrich: EnrichTaskConfig;
+}
+
+export interface EnrichTaskConfig {
+  provider: EnrichProvider | null;
+  model: string | null;
+}
+
+export interface StoredAISettings {
+  extract: AITaskConfig;
+  ask: AITaskConfig;
+  enrich: EnrichTaskConfig;
 }
 
 const EMPTY: AISettings = {
@@ -32,8 +44,21 @@ interface SettingsRow {
   extract_model: string | null;
   ask_provider: AIProvider | null;
   ask_model: string | null;
-  enrich_provider: AIProvider | null;
+  enrich_provider: EnrichProvider | null;
   enrich_model: string | null;
+}
+
+interface EnrichSettingsRow {
+  enrich_provider: EnrichProvider | null;
+  enrich_model: string | null;
+}
+
+function readEnrichConfig(row: EnrichSettingsRow | null): EnrichTaskConfig {
+  if (row?.enrich_provider === "openai-api") return { provider: "openai-api", model: null };
+  if (row?.enrich_provider === "openai-codex" || row?.enrich_provider === "anthropic-claude") {
+    return { provider: row.enrich_provider, model: row.enrich_model };
+  }
+  return { provider: null, model: null };
 }
 
 export async function getAISettings(
@@ -52,14 +77,27 @@ export async function getAISettings(
   return {
     extract: { provider: row.extract_provider, model: row.extract_model },
     ask: { provider: row.ask_provider, model: row.ask_model },
-    enrich: { provider: row.enrich_provider, model: row.enrich_model },
+    enrich: readEnrichConfig(row),
   };
+}
+
+export async function getEnrichSettings(
+  supabase: SupabaseClient,
+  ownerId: string,
+): Promise<EnrichTaskConfig> {
+  const { data, error } = await supabase
+    .from("ai_settings")
+    .select("enrich_provider, enrich_model")
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+  if (error) throw new Error(`AI 설정 조회 실패: ${error.message}`);
+  return readEnrichConfig(data as EnrichSettingsRow | null);
 }
 
 export async function saveAISettings(
   supabase: SupabaseClient,
   ownerId: string,
-  settings: AISettings,
+  settings: StoredAISettings,
 ): Promise<void> {
   const { error } = await supabase.from("ai_settings").upsert({
     owner_id: ownerId,

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "status": "clean",
+  "responsiveCT": "36/36",
+  "unit": "33 files / 135 tests",
+  "typecheck": true,
+  "lint": true,
+  "build": true,
+  "localServer": "http://localhost:3000 HTTP 200",
+  "remoteMutation": false,
+  "deploymentOrPublish": false,
+  "stagingCommitPushOrPr": false
+}

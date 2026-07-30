@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthorizedUser } from "@/lib/auth";
 import { enrichCompany } from "@/lib/ai/enrich";
+import {
+  CompanySearchError,
+  parseCompanySearchInput,
+} from "@/lib/ai/openai-company-search";
+import { ProviderAuthError } from "@/lib/ai/provider-types";
 
 // 회사를 특정하지 못하면 모델이 검색을 반복해 2분을 넘기는 경우가 있다 (실측).
 // Vercel 상한(300초)까지 열어둔다 — 중간에 끊기면 결과가 통째로 날아간다.
@@ -18,28 +23,33 @@ export async function POST(request: NextRequest) {
   if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { user, supabase } = auth;
 
-  const body = (await request.json()) as Record<string, unknown>;
-  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
-
-  const company = str(body.company);
-  if (!company) {
-    return NextResponse.json(
-      { error: "회사명이 비어 있어 검색할 수 없습니다. 회사명을 먼저 입력하세요." },
-      { status: 400 },
-    );
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ code: "invalid_input", error: "invalid_input" }, { status: 400 });
+  }
+  const input = parseCompanySearchInput(body);
+  if (!input) {
+    return NextResponse.json({ code: "invalid_input", error: "invalid_input" }, { status: 400 });
   }
 
   try {
-    const suggestion = await enrichCompany(supabase, user.id, {
-      company,
-      companyEn: str(body.company_en),
-      website: str(body.website),
-      address: str(body.address),
-      taxCode: str(body.tax_code),
-    });
+    const suggestion = await enrichCompany(supabase, user.id, input);
     return NextResponse.json(suggestion);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "조사에 실패했습니다.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    if (err instanceof ProviderAuthError) {
+      return NextResponse.json(
+        { code: err.code, error: err.code, retryable: err.retryable },
+        { status: err.status },
+      );
+    }
+    if (err instanceof CompanySearchError) {
+      return NextResponse.json({ code: err.code, error: err.code }, { status: err.status });
+    }
+    return NextResponse.json(
+      { code: "upstream_failure", error: "upstream_failure" },
+      { status: 502 },
+    );
   }
 }

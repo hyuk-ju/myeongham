@@ -1,46 +1,82 @@
 "use client";
 
+import { Check, Copy } from "lucide-react";
 import { useState } from "react";
+import { Action } from "@/components/ui";
 
-/** 사용자 식별자를 보여주고 한 번에 복사하게 한다 (폰에서 타이핑하기 어려우므로). */
-export function CopyId({ userId, email }: { userId: string; email: string | null }) {
-  const [copied, setCopied] = useState(false);
+type CopyStatus = "idle" | "copied" | "failed";
 
-  const payload = [email ? `이메일: ${email}` : null, `사용자 ID: ${userId}`]
-    .filter(Boolean)
+type CopySupportDetailsProps = Readonly<{
+  supportCode: string;
+  maskedEmail: string | null;
+}>;
+
+export function CopySupportDetails({
+  supportCode,
+  maskedEmail,
+}: CopySupportDetailsProps) {
+  const [status, setStatus] = useState<CopyStatus>("idle");
+  const payload = [
+    maskedEmail ? `마스킹 이메일: ${maskedEmail}` : null,
+    `지원 코드: ${supportCode}`,
+  ]
+    .filter((value): value is string => value !== null)
     .join("\n");
 
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(payload);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // 클립보드가 막힌 브라우저 — 화면의 값을 직접 선택해 복사하면 된다.
+  function copyDetails(): void {
+    const clipboard = navigator.clipboard;
+    if (clipboard === undefined) {
+      setStatus("failed");
+      return;
     }
+
+    void clipboard.writeText(payload).then(
+      () => {
+        setStatus("copied");
+        window.setTimeout(() => setStatus("idle"), 2_000);
+      },
+      () => setStatus("failed"),
+    );
   }
 
   return (
-    <div className="space-y-2 rounded-2xl border border-line bg-surface p-4 shadow-sm">
-      <dl className="space-y-2 text-sm">
-        {email && (
+    <div className="ui-surface ui-surface-slip space-y-4 p-4">
+      <dl className="space-y-3 text-sm">
+        {maskedEmail ? (
           <div>
-            <dt className="text-xs font-semibold text-soft">이메일</dt>
-            <dd className="mt-0.5 break-all font-mono text-xs select-all">{email}</dd>
+            <dt className="text-xs font-semibold text-soft">마스킹 이메일</dt>
+            <dd className="mt-1 break-all font-mono text-xs">{maskedEmail}</dd>
           </div>
-        )}
+        ) : null}
         <div>
-          <dt className="text-xs font-semibold text-soft">사용자 ID</dt>
-          <dd className="mt-0.5 break-all font-mono text-xs select-all">{userId}</dd>
+          <dt className="text-xs font-semibold text-soft">지원 코드</dt>
+          <dd className="mt-1 break-all font-mono text-sm font-semibold tracking-wide">
+            {supportCode}
+          </dd>
         </div>
       </dl>
 
-      <button
-        onClick={copy}
-        className="w-full rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-brand-ink"
+      <Action
+        onClick={copyDetails}
+        icon={
+          status === "copied" ? (
+            <Check aria-hidden="true" className="size-4" />
+          ) : (
+            <Copy aria-hidden="true" className="size-4" />
+          )
+        }
+        className="w-full"
       >
-        {copied ? "복사됨 ✓" : "복사하기"}
-      </button>
+        {status === "copied" ? "복사됨" : "지원 정보 복사"}
+      </Action>
+
+      <p aria-live="polite" className="min-h-5 text-xs text-soft">
+        {status === "failed"
+          ? "클립보드에 복사하지 못했습니다. 화면의 지원 코드를 직접 선택해 주세요."
+          : status === "copied"
+            ? "마스킹된 지원 정보만 복사했습니다."
+            : "원본 계정 식별자는 표시하거나 복사하지 않습니다."}
+      </p>
     </div>
   );
 }

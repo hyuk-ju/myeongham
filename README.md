@@ -70,13 +70,19 @@
 - **Next.js 16** (App Router) / TypeScript / Tailwind CSS 4 / PWA
 - **Clerk** — 로그인 (Google 등 소셜). `ALLOWED_EMAILS` 로 이중 차단
 - **Supabase** — Postgres + Storage. RLS 는 Clerk 세션 토큰의 `sub` 기준
-- **AI** — ChatGPT(Codex) 또는 Claude **구독 OAuth**. API 키를 쓰지 않아
-  토큰당 과금이 없습니다. **명함 인식 / 질문 답변 / 회사 정보 검색** 세 작업에
-  각각 다른 AI·모델을 지정할 수 있어, 한쪽이 한도에 걸리면 반대쪽으로 넘길 수 있습니다.
-  웹 검색은 양쪽 다 지원합니다 (Claude `web_search_20250305`, Codex `web_search`).
+- **AI** — 명함 인식·질문과 선택적인 회사 검색은 ChatGPT(Codex)·Claude
+  **구독 OAuth** 경로를 사용할 수 있습니다. ChatGPT OAuth 회사 검색은 비공식
+  Codex 백엔드에 의존하는 **실험 옵션**이라 API 호환성·정책 변경 위험이 있습니다.
+  회사 검색에는 Claude OAuth와 서버 소유 **공식 OpenAI Responses API `web_search`**도
+  선택지로 유지합니다. 공식 API를 고른 경우에만 ChatGPT 구독과 별도 API 요금이
+  발생합니다.
 
 AI 호출은 `lib/ai/llm.ts` 한 곳으로 모입니다. 비공식 표면(Codex 백엔드)은
-`lib/ai/codex.ts` 에 격리돼 있어 바뀌어도 한 파일만 고치면 됩니다.
+`lib/ai/codex.ts`에 격리돼 있고, OAuth 회사 검색은 오류·빈 출력·검색 미실행·출처
+없음을 모두 실패로 처리합니다. 실패해도 다른 provider로 자동 전환하지 않으므로
+설정에서 Claude 또는 공식 OpenAI API를 직접 선택해야 합니다. 공식 회사 검색
+provider는 `lib/ai/openai-company-search.ts`에 있으며 키·검색 결과는 브라우저나
+명함 데이터베이스에 저장하지 않습니다.
 
 ---
 
@@ -99,3 +105,25 @@ npm run dev
   (Supabase/Clerk/AI 제공자)에 저장·전송하는 구성이 사내 규정상 허용되는지
   확인해 두시길 권합니다.
 - 전화번호는 국가번호(+82/+84)를 현지 표기로 자동 변환해 저장합니다.
+
+## 운영 범위와 검증
+
+- 대기열은 `pending → processing → extracted/failed` 상태를 DB가 소유합니다.
+  앱을 닫거나 다른 기기에서 열어도 원본과 실패 항목이 남으며, 홈·촬영·검토에서
+  **이어하기/다시 시도**할 수 있습니다. 성공 저장과 draft 삭제는 한 번의
+  원자적 finalization 경계에서 처리됩니다.
+- 회사 검색은 공식 OpenAI API 키가 서버에 설정된 경우에만 실행됩니다. 키가 없거나
+  사용량 제한에 걸리면 `provider_unconfigured`/`rate_limited` 상태로 멈추고 남은
+  회사는 대기 상태로 보존됩니다. API 호출·요금은 ChatGPT Plus/Pro 구독과 별개입니다.
+- 명함 인식·질문에 사용하는 기존 private Codex OAuth 경로는 이번 범위에서
+  교체하지 않았습니다. 해당 경로의 가용성·약관·응답 형식 변화는 잔여 운영 위험이며,
+  문제가 생기면 Claude OAuth로 작업별 provider를 전환할 수 있습니다.
+- 마이그레이션 `0012` 이후의 queue/finalization 변경은 로컬 검증용으로만 포함합니다.
+  운영 Supabase에 적용하기 전 백업·승인·점검을 거쳐 순서대로 실행하고, 문제가 생기면
+  마지막 적용분을 되돌린 뒤 검증된 백업을 복구합니다. 직접 연결된 프로젝트에
+  자동 적용하거나 배포하지 않습니다.
+- 검증 명령과 산출물은 `SETUP.md`의 표를 따릅니다. 로컬 unit/CT/lint/typecheck/build,
+  fixture-FAPI DB 동시성/RLS, 그리고 Clerk 자격 증명이 있는 경우에만 production
+  E2E를 실행합니다. 자격 증명이 없으면 `credential_gate`, Docker가 없으면
+  `docker_gate`, 원격 DB/OpenAI 실검증은 `blocked_external`로 기록하며 성공으로
+  위장하지 않습니다. 통합 스냅샷과 task evidence는 `.omo/evidence/`에 저장합니다.

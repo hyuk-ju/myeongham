@@ -1,0 +1,8 @@
+{
+  "gate": "unit",
+  "command": "npm test",
+  "exitCode": 0,
+  "observable": "33 test files, 135 tests passed including evidence audit and responsive settings/cards/capture/enrich/ask regressions",
+  "responsiveFocused": "5 files, 9 tests passed",
+  "productFailures": 0
+}

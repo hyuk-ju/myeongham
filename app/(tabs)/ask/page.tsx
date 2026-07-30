@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { getActiveTokenRow } from "@/lib/ai/token-store";
 import Link from "next/link";
-import { AskClient } from "./ask-client";
+import { AskView } from "./ask-client";
 
 export default async function AskPage() {
   const { user, supabase } = await requireUser();
@@ -12,7 +12,7 @@ export default async function AskPage() {
   ]);
 
   return (
-    <main className="mx-auto w-full max-w-2xl px-5 pt-8">
+    <main className="mx-auto w-full max-w-6xl px-5 pt-8 sm:px-6 lg:px-8 lg:pt-12">
       <header className="mb-5">
         <h1 className="text-[22px] font-bold tracking-tight">물어보기</h1>
         <p className="mt-0.5 text-sm text-soft">
@@ -29,7 +29,7 @@ export default async function AskPage() {
           하세요.
         </div>
       ) : (
-        <AskClient />
+        <AskView />
       )}
     </main>
   );

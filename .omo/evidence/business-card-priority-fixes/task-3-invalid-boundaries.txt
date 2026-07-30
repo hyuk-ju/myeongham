@@ -1,0 +1,10 @@
+scenario: todo-3-invalid-boundaries
+invocation: npm run test -- --run tests/unit/http-contracts.spec.ts tests/unit/image-signature.spec.ts tests/unit/extract-route-boundary.spec.ts
+observable: Vitest reported 3 files passed and 15 tests passed.
+coverage: malformed JSON/multipart and empty bodies return invalid_input; spoofed, MIME-mismatched, truncated, and malformed-signature images return unsupported_media; oversized image payload returns payload_too_large; unknown draft fields/status return invalid_response.
+coverage: downloaded replacement objects are rejected before AI for signature/path/MIME mismatch, truncation, and oversize.
+artifact: tests/unit/http-contracts.spec.ts, tests/unit/image-signature.spec.ts, tests/unit/extract-route-boundary.spec.ts
+credential_gate: authenticated production E2E upload-boundary scenario was not run because no verified Clerk/local data-plane preconditions were available in this worker lane.
+static: npx eslint on all owned Todo 3 files exited 0.
+workspace_typecheck: npx tsc --noEmit remains blocked only by pre-existing Todo 4 settings provider mismatch in app/(tabs)/settings/page.tsx:71; no diagnostics remain in owned Todo 3 files.
+post_download: app/api/drafts/[id]/extract/route.ts updates the draft with unsupported_media or payload_too_large and returns the same stable code before any AI call.

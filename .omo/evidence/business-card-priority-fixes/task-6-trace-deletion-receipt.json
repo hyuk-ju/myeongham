@@ -1,0 +1,14 @@
+{
+  "scenario_id": "todo6-production-e2e-trace-lifecycle",
+  "invocation": "node scripts/run-local-production-e2e.mjs -- tests/e2e/manual-finalize.spec.ts tests/e2e/finalize-retry.spec.ts --project=chromium",
+  "result": "blocked",
+  "gate": "credential_gate",
+  "run_root_created": false,
+  "trace_files_created": [],
+  "trace_deletion": "no-op: teardown had no run root or trace files to remove",
+  "spec_inventory": "3 executable scenarios listed by Playwright; manual-finalize captures task-6-manual-finalize.png only inside E2E_RUN_ROOT when the credential gate passes",
+  "sanitized_persisted_artifacts": [
+    ".omo/evidence/business-card-priority-fixes/task-6-manual-finalize-summary.json",
+    ".omo/evidence/business-card-priority-fixes/task-6-rollback.txt"
+  ]
+}

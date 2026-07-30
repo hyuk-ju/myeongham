@@ -1,0 +1,10 @@
+{
+  "status": "superseded",
+  "reason": "Gate review required exact raw stdout/stderr and exit-code receipts for every deterministic gate.",
+  "priorFinalContext": ".omo/evidence/business-card-priority-fixes/snapshots/final-context.json",
+  "priorTaskEvidenceManifest": ".omo/evidence/business-card-priority-fixes/snapshots/task-evidence-manifest.json",
+  "priorHashes": {
+    "sourceManifestSha256": "ea1b859c7090dc339874f8957e5a925e21575071104eeb3b49cc6378b83ae520",
+    "taskEvidenceManifestSha256": "2e932b22f2a0134fb52e7d6a8246f837a2184043d12419b220ef2f84461ac723"
+  }
+}

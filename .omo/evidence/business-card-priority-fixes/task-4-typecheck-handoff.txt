@@ -1,0 +1,4 @@
+scenario: full TypeScript check after Todo4 contract fixes
+invocation: npm run typecheck
+observable: one remaining error is Todo10-owned app/(tabs)/settings/page.tsx:71; its OAuth-only TaskConfig cannot represent AISettings.enrich.provider='openai-api'. Todo4-owned provider/search/settings files produce no TypeScript diagnostics. UI handoff required: consume EnrichTaskConfig/EnrichProvider separately from OAuth TaskConfig without changing server contracts.
+captured: 2026-07-29 local run

@@ -1,28 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ExtractedCard } from "@/lib/ai/extract";
-import type { EnrichSuggestion } from "@/lib/ai/enrich";
+import {
+  parseSignedUrls,
+  type ContractResult,
+  type DraftRecord,
+  type DraftResponse,
+} from "@/lib/http-contracts";
 
 /** 대기열 한 건. AI 분석은 아직 안 돌았을 수도 있다. */
-export interface DraftRow {
-  id: string;
-  image_path: string;
-  status: "pending" | "extracted" | "failed";
-  extracted: ExtractedCard | null;
-  error: string | null;
-  attempts: number;
-  /** 미리 받아둔 회사 정보 제안. 적용은 사용자가 검토 화면에서 한다. */
-  enrich: EnrichSuggestion | null;
-  created_at: string;
-  /** DB 컬럼이 아니라 API 가 붙여주는 서명 URL (1시간) */
-  image_url: string | null;
-}
+export type DraftRow = DraftResponse;
 
 export const DRAFT_COLUMNS =
   "id, image_path, status, extracted, error, attempts, enrich, created_at";
 
 const SIGNED_URL_TTL = 3600;
-
-type DraftRecord = Omit<DraftRow, "image_url">;
 
 /**
  * 썸네일·검토 화면에서 쓸 서명 URL 을 붙인다.
@@ -32,17 +22,31 @@ type DraftRecord = Omit<DraftRow, "image_url">;
  */
 export async function withImageUrls(
   supabase: SupabaseClient,
-  rows: DraftRecord[],
-): Promise<DraftRow[]> {
-  if (!rows.length) return [];
+  rows: readonly DraftRecord[],
+): Promise<readonly DraftRow[]> {
+  const result = await withImageUrlsResult(supabase, rows);
+  return result.ok ? result.value : [];
+}
 
-  const { data } = await supabase.storage
+export async function withImageUrlsResult(
+  supabase: SupabaseClient,
+  rows: readonly DraftRecord[],
+): Promise<ContractResult<readonly DraftRow[]>> {
+  if (!rows.length) return { ok: true, value: [] };
+
+  const { data, error } = await supabase.storage
     .from("card-images")
     .createSignedUrls(
       rows.map((r) => r.image_path),
       SIGNED_URL_TTL,
     );
+  if (error) return { ok: false, code: "invalid_response" };
 
-  const byPath = new Map((data ?? []).map((s) => [s.path, s.signedUrl]));
-  return rows.map((r) => ({ ...r, image_url: byPath.get(r.image_path) ?? null }));
+  const signed = parseSignedUrls(data ?? []);
+  if (!signed.ok) return { ok: false, code: signed.code };
+  const byPath = new Map(signed.value.map((entry) => [entry.path, entry.signedUrl]));
+  return {
+    ok: true,
+    value: rows.map((row) => ({ ...row, image_url: byPath.get(row.image_path) ?? null })),
+  };
 }

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { ArrowRight, Clipboard, Download, Mail, Phone, Sparkles } from "lucide-react";
+import { Action, StateBlock, Surface } from "@/components/ui";
 
 interface AskRow {
   card_id: string | null;
@@ -25,11 +27,20 @@ const EXAMPLES = [
   "작년에 전시회에서 만난 사람",
 ];
 
-export function AskClient() {
+export type AskViewProps = Readonly<{
+  initialResult?: AskResult | null;
+  onAsk?: (question: string) => Promise<AskResult>;
+}>;
+
+export function AskClient(props: AskViewProps = {}) {
+  return <AskView {...props} />;
+}
+
+export function AskView({ initialResult = null, onAsk }: AskViewProps = {}) {
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AskResult | null>(null);
+  const [result, setResult] = useState<AskResult | null>(initialResult);
   const [asked, setAsked] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -43,17 +54,18 @@ export function AskClient() {
     setCopied(false);
 
     try {
-      const res = await fetch("/api/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: trimmed }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error ?? "질의에 실패했습니다.");
-        return;
+      if (onAsk) {
+        setResult(await onAsk(trimmed));
+      } else {
+        const res = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: trimmed }) });
+        const json: unknown = await res.json();
+        if (!res.ok || typeof json !== "object" || json === null) {
+          const message = typeof json === "object" && json !== null && "error" in json && typeof json.error === "string" ? json.error : "질의에 실패했습니다.";
+          setError(message);
+          return;
+        }
+        setResult(json as AskResult);
       }
-      setResult(json as AskResult);
     } catch {
       setError("네트워크 오류가 발생했습니다. 다시 시도하세요.");
     } finally {
@@ -97,14 +109,18 @@ export function AskClient() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="grid gap-5 lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start lg:gap-6">
+      <Surface variant="tinted" className="p-4 sm:p-5 lg:sticky lg:top-6 lg:col-start-1 lg:row-start-1">
+        <div className="flex items-start gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-ink"><Sparkles aria-hidden="true" className="size-5" /></span><div><h2 className="font-semibold">명함에게 물어보기</h2><p className="mt-1 text-sm text-soft">질문은 등록된 명함 안에서만 찾아 안전하게 정리합니다.</p></div></div>
+      </Surface>
       <form
+        className="lg:col-start-2 lg:row-start-1"
         onSubmit={(e) => {
           e.preventDefault();
           ask(question);
         }}
       >
-        <div className="flex items-end gap-2 rounded-2xl border border-line bg-surface p-3 shadow-sm">
+        <div className="flex items-end gap-2 rounded-2xl border border-line bg-surface p-3 shadow-sm focus-within:border-brand focus-within:ring-3 focus-within:ring-brand-soft">
           <textarea
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
@@ -115,29 +131,23 @@ export function AskClient() {
               }
             }}
             rows={2}
-            placeholder="예: A 설비를 만들 수 있는 회사와 담당자 연락처 정리해줘"
-            className="max-h-40 w-full resize-none bg-transparent px-1 py-1 text-[16px] outline-none placeholder:text-faint"
+            placeholder="예: 담당자 연락처를 정리해줘"
+            className="max-h-40 w-full resize-none bg-transparent px-1 py-1 text-[16px] outline-none placeholder:text-faint focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
           />
-          <button
+          <Action
             type="submit"
             disabled={busy || !question.trim()}
             aria-label="질문하기"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-ink disabled:opacity-40"
+            className="ui-icon-button shrink-0"
+            icon={busy ? undefined : <ArrowRight aria-hidden="true" className="size-5" />}
+            loading={busy}
           >
-            {busy ? (
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-                <path d="M5 12h14" />
-                <path d="m13 6 6 6-6 6" />
-              </svg>
-            )}
-          </button>
+          </Action>
         </div>
       </form>
 
       {!result && !busy && !error && (
-        <div className="space-y-2">
+        <div className="space-y-2 lg:col-start-1">
           <p className="text-xs font-semibold text-faint">이렇게 물어보세요</p>
           <div className="flex flex-wrap gap-2">
             {EXAMPLES.map((ex) => (
@@ -148,7 +158,7 @@ export function AskClient() {
                   setQuestion(ex);
                   ask(ex);
                 }}
-                className="rounded-full border border-line bg-surface px-3.5 py-2 text-[13px] text-soft shadow-sm"
+                className="min-h-11 rounded-full border border-line bg-surface px-3.5 py-2 text-[13px] text-soft shadow-sm hover:bg-surface-hover"
               >
                 {ex}
               </button>
@@ -158,20 +168,19 @@ export function AskClient() {
       )}
 
       {busy && (
-        <div className="rounded-2xl border border-line bg-surface px-4 py-5 text-sm text-soft shadow-sm">
-          <p className="flex items-center gap-2.5">
-            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand border-t-transparent" />
-            질문을 검색조건으로 바꾸고, 명함을 뒤져서 정리하는 중… (수십 초 걸릴 수 있어요)
-          </p>
+        <div className="lg:col-start-2">
+          <StateBlock state="loading" title="명함을 검색하는 중" description="질문을 검색 조건으로 바꾸고 결과를 정리하고 있습니다." />
         </div>
       )}
 
       {error && (
-        <p className="rounded-xl bg-danger-soft px-3.5 py-2.5 text-sm text-danger">{error}</p>
+        <div className="lg:col-start-2">
+          <StateBlock state="error" title="질의를 완료하지 못했습니다" description={error} action={<Action variant="secondary" onClick={() => asked && ask(asked)}>다시 시도</Action>} />
+        </div>
       )}
 
       {result && (
-        <section className="space-y-3">
+        <section className="space-y-3 lg:col-start-2">
           <div className="flex items-center justify-between">
             <p className="text-sm text-soft">
               <span className="font-semibold text-ink">{result.rows.length}건</span> 찾음
@@ -179,26 +188,28 @@ export function AskClient() {
             </p>
             {result.rows.length > 0 && (
               <div className="flex gap-2">
-                <button
+                <Action
                   onClick={copyTable}
-                  className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium shadow-sm"
+                  variant="secondary"
+                  className="px-3 py-2 text-xs"
+                  icon={<Clipboard aria-hidden="true" className="size-4" />}
                 >
-                  {copied ? "복사됨 ✓" : "표 복사"}
-                </button>
-                <button
+                  {copied ? "복사됨" : "표 복사"}
+                </Action>
+                <Action
                   onClick={downloadCsv}
-                  className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium shadow-sm"
+                  variant="secondary"
+                  className="px-3 py-2 text-xs"
+                  icon={<Download aria-hidden="true" className="size-4" />}
                 >
                   CSV
-                </button>
+                </Action>
               </div>
             )}
           </div>
 
           {result.rows.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-line-strong bg-surface/50 px-5 py-8 text-center text-sm text-soft">
-              {result.note ?? `"${asked}" 에 맞는 명함을 찾지 못했습니다.`}
-            </div>
+            <StateBlock state="empty" title="맞는 명함을 찾지 못했습니다" description={result.note ?? (asked ? `“${asked}”에 맞는 명함이 없습니다.` : "질문을 조금 바꿔 다시 시도해 보세요.")} />
           ) : (
             <ul className="space-y-2.5">
               {result.rows.map((row, i) => (
@@ -221,13 +232,15 @@ export function AskClient() {
                   </div>
 
                   <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                    {row.phone && (
-                      <a href={`tel:${row.phone}`} className="font-medium text-brand">
+                    {safePhone(row.phone) && (
+                      <a href={`tel:${row.phone}`} className="inline-flex min-h-11 items-center gap-1.5 break-all font-medium text-brand">
+                        <Phone aria-hidden="true" className="size-4 shrink-0" />
                         {row.phone}
                       </a>
                     )}
-                    {row.email && (
-                      <a href={`mailto:${row.email}`} className="font-medium text-brand">
+                    {safeEmail(row.email) && (
+                      <a href={`mailto:${row.email}`} className="inline-flex min-h-11 items-center gap-1.5 break-all font-medium text-brand">
+                        <Mail aria-hidden="true" className="size-4 shrink-0" />
                         {row.email}
                       </a>
                     )}
@@ -252,3 +265,6 @@ export function AskClient() {
     </div>
   );
 }
+
+function safePhone(value: string | null): string | null { return typeof value === "string" && /^[+()\d][\d ()-]{5,24}$/.test(value.trim()) ? value.trim() : null; }
+function safeEmail(value: string | null): string | null { return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()) ? value.trim() : null; }

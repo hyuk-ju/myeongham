@@ -1,0 +1,9 @@
+{
+  "scenario": "Full Todo8-relevant unit suite stability after unchanged sources",
+  "invocation": "npm run test -- --run tests/unit",
+  "runs": [
+    {"started_at":"2026-07-30T02:17:00+0900","result":"pass","test_files":29,"tests":121,"unhandled_errors":0},
+    {"started_at":"2026-07-30T02:17:06+0900","result":"pass","test_files":29,"tests":121,"unhandled_errors":0}
+  ],
+  "observable": "Both sequential Vitest runs completed with no window-is-not-defined event or other unhandled error; only existing Node warnings about localstorage-file were emitted."
+}

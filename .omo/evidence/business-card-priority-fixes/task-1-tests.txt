@@ -1,0 +1,65 @@
+task=1
+scenario=baseline_green
+invocation=npm run test -- --run tests/unit/baseline
+exit=0
+observable=2 test files passed; 6 tests passed
+
+scenario=full_unit_foundation
+invocation=npm run test -- --run
+exit=0
+observable=6 test files passed; 22 tests passed
+
+scenario=local_supabase_wrapper_process_interception
+invocation=npm run test -- --run tests/unit/foundation/wrapper.test.ts
+exit=0
+observable=4 tests passed; the migration-new, status-env, and db-reset allowlisted commands reached the intercepted local Supabase process
+
+scenario=component_test_and_axe
+invocation=npm run test:ct
+exit=0
+observable=3 Chromium component tests passed, including the axe baseline audit
+
+scenario=static_typecheck
+invocation=npm run typecheck
+exit=0
+observable=TypeScript emitted zero diagnostics
+
+scenario=lint
+invocation=npm run lint
+exit=0
+observable=ESLint emitted zero diagnostics
+
+scenario=normal_production_build
+invocation=npm run build
+exit=0
+observable=Next.js 16.2.12 compiled, typechecked, and generated 29 routes
+
+scenario=chromium_install
+invocation=npx playwright install chromium; npx playwright install --list
+exit=0
+observable=Playwright 1.62.0 Chromium revision 1234 and headless-shell revision 1234 are installed
+
+scenario=concurrent_component_harnesses
+invocation=two concurrent npm run test:ct processes with CT_PORT 32111 and 32112 and separate OS-temp output/cache roots
+exit=0,0
+observable=both isolated runs reported 3 passed
+
+scenario=source_manifest_v2
+invocation=npm run delivery:snapshot -- --source-root current-worktree --base-head current-HEAD --output task-1-source-manifest.json
+exit=0
+observable=version 2; files 180; deletions 0; treeSha256 ec14cc306833b1ac7ce97724c34b0fa729df0fbfb5761697cbd003064ff0077c; manifestSha256 beaf8865629109ffacd54c4958389fb6b028dbc5dd4eedd7777dac0cbd52fc0b
+
+scenario=real_temp_clone_materialization
+invocation=git clone --no-local current-worktree OS-temp/review-repo; node scripts/materialize-review-tree.mjs --source-root current-worktree --base-head current-HEAD --manifest task-1-source-manifest.json --destination OS-temp/review-repo
+exit=0
+observable=materialized treeSha256 ec14cc306833b1ac7ce97724c34b0fa729df0fbfb5761697cbd003064ff0077c; original status SHA256 0acd56fba261bd73f633e31ae796f5b2b3f4dbae8501b3e168b19ac5fb1cf8cf, index SHA256 fa015ae3145b538cff0c51efffd2432197e036974d794ef5cf49a281ffdef3d9, and HEAD 607f8dc73874afa92a50bb394b93c6950ab3c60b were unchanged; temp clone removed
+
+scenario=production_dev_audit_absence
+invocation=scan .next/static and .next/server runtime artifacts for react-grab, react-scan, and react-doctor
+exit=0
+observable=no dev-audit runtime chunk was found
+
+scenario=value_free_environment_template
+invocation=npm run evidence:scan -- --include .env.example
+exit=0
+observable=.env.example is nonignored, contains 19 empty variable assignments, and passed evidence scanning

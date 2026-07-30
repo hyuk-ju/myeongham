@@ -1,0 +1,24 @@
+task=1
+scenario=vitest_unit_spec_collection_red
+invocation=npx vitest list tests/unit/foundation/collection-handoff.spec.ts
+exit=0
+observable=before the config change the temporary spec produced zero listed tests
+
+scenario=vitest_unit_spec_collection_green
+invocation=npx vitest list tests/unit/foundation/collection-handoff.spec.ts
+exit=0
+observable=after the config change Vitest listed exactly the temporary spec and its one test
+cleanup=temporary collection-handoff.spec.ts removed
+
+scenario=existing_todo1_unit_suite
+invocation=npm run test -- --run tests/unit/baseline tests/unit/foundation
+exit=0
+observable=6 test files passed; 22 tests passed
+
+scenario=typescript_config_validation
+invocation=npm run typecheck
+exit=0
+observable=TypeScript emitted zero diagnostics
+
+changed_file=vitest.config.mts
+product_behavior_changed=false

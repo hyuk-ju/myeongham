@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthorizedUser } from "@/lib/auth";
 import { enrichCompany } from "@/lib/ai/enrich";
+import {
+  CompanySearchError,
+  parseCompanySearchInput,
+} from "@/lib/ai/openai-company-search";
+import { ProviderAuthError } from "@/lib/ai/provider-types";
 
 // 회사를 특정하지 못하면 모델이 검색을 반복해 2분을 넘기는 경우가 있다 (실측).
 // Vercel 상한(300초)까지 열어둔다 — 중간에 끊기면 결과가 통째로 날아간다.
@@ -21,32 +26,49 @@ export async function POST(request: NextRequest) {
   if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { user, supabase } = auth;
 
-  const body = (await request.json()) as Record<string, unknown>;
-  const company = typeof body.company === "string" ? body.company.trim() : "";
-  if (!company) return NextResponse.json({ error: "회사명이 없습니다." }, { status: 400 });
-
-  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ code: "invalid_input", error: "invalid_input" }, { status: 400 });
+  }
+  const input = parseCompanySearchInput(body);
+  if (!input) {
+    return NextResponse.json({ code: "invalid_input", error: "invalid_input" }, { status: 400 });
+  }
 
   try {
-    const suggestion = await enrichCompany(supabase, user.id, {
-      company,
-      companyEn: str(body.company_en),
-      website: str(body.website),
-      address: str(body.address),
-      taxCode: str(body.tax_code),
-    });
+    const suggestion = await enrichCompany(supabase, user.id, input);
 
     const { data, error } = await supabase.rpc("apply_draft_enrich", {
-      p_company: company,
+      p_company: input.company,
       p_enrich: suggestion,
     });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      return NextResponse.json(
+        { code: "upstream_failure", error: "upstream_failure", stopQueue: false },
+        { status: 502 },
+      );
+    }
 
-    return NextResponse.json({ suggestion, applied: (data as number) ?? 0 });
+    return NextResponse.json({ suggestion, applied: typeof data === "number" ? data : 0 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "회사 조사에 실패했습니다.";
-    // 한도·인증 문제는 뒤 건도 전부 같은 이유로 실패한다 → 워커가 루프를 멈춘다.
-    const stopQueue = message.includes("사용량 한도") || message.includes("인증이 만료");
-    return NextResponse.json({ error: message, stopQueue }, { status: 502 });
+    if (err instanceof ProviderAuthError) {
+      return NextResponse.json(
+        { code: err.code, error: err.code, stopQueue: true, retryable: err.retryable },
+        { status: err.status },
+      );
+    }
+    if (err instanceof CompanySearchError) {
+      const stopQueue = err.code === "provider_unconfigured" || err.code === "rate_limited" || err.code === "invalid_provider_response";
+      return NextResponse.json(
+        { code: err.code, error: err.code, stopQueue },
+        { status: err.status },
+      );
+    }
+    return NextResponse.json(
+      { code: "upstream_failure", error: "upstream_failure", stopQueue: false },
+      { status: 502 },
+    );
   }
 }
