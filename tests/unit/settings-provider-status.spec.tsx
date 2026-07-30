@@ -16,7 +16,7 @@ const provider: ProviderState = {
 
 describe("settings provider transparency", () => {
   it("keeps provider settings focused on user OAuth without key material", () => {
-    render(
+    const { container } = render(
       <SettingsView
         providers={[provider]}
         catalog={[]}
@@ -33,6 +33,7 @@ describe("settings provider transparency", () => {
     expect(screen.queryByText("설정 필요")).toBeNull();
     expect(screen.getByText("ac•••42")).toBeVisible();
     expect(screen.queryByText(/OPENAI_API_KEY/)).toBeNull();
+    expect(container.querySelectorAll("p.ui-copy-keep")).toHaveLength(4);
   });
 
   it("uses inline confirmation instead of browser confirm for disconnect", () => {
