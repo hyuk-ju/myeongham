@@ -131,7 +131,7 @@ const DraftRecordSchema = z.object({
   id: z.string().uuid(), image_path: boundedText(1_000),
   status: z.enum(["pending", "processing", "extracted", "failed"]),
   extracted: ExtractedCardSchema.nullable(), error: nullableText(1_000), attempts: z.number().int().min(0),
-  enrich: EnrichSuggestionSchema.nullable(), created_at: z.string().datetime(),
+  enrich: EnrichSuggestionSchema.nullable(), created_at: z.iso.datetime({ offset: true }),
 }).strict();
 
 const DraftResponseSchema = DraftRecordSchema.extend({ image_url: absoluteUrl.nullable() });

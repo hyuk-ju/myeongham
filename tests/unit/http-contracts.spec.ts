@@ -185,6 +185,15 @@ describe("HTTP boundary contracts", () => {
     });
   });
 
+  it("Given a PostgreSQL timestamptz offset When a draft is parsed Then the server record is accepted", () => {
+    const createdAt = "2026-07-30T05:56:49.28697+00:00";
+
+    expect(parseDraftRecord({ ...draftRecord("pending"), created_at: createdAt })).toEqual({
+      ok: true,
+      value: expect.objectContaining({ created_at: createdAt }),
+    });
+  });
+
   it("Given a valid enriched draft When parsed Then structured sources survive the response boundary", () => {
     const enrich = {
       industry: "Manufacturing",
