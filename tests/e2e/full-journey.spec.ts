@@ -34,7 +34,8 @@ test("authenticated user can move through capture, review, cards, enrichment, an
     await page.goto("/enrich");
     await expect(page.getByRole("heading", { name: /태그|보강/ })).toBeVisible();
     await page.goto("/settings");
-    await expect(page.getByRole("heading", { name: "서버 소유 OpenAI API" })).toBeVisible();
-    await expect(page.getByText(/API 사용료는 ChatGPT 구독과 별도/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "사용자 OAuth 연결" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "서버 소유 OpenAI API" })).toHaveCount(0);
+    await expect(page.getByText(/회사 검색은 연결된 ChatGPT OAuth 또는 Claude OAuth/)).toBeVisible();
   });
 });

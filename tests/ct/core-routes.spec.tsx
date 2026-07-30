@@ -173,17 +173,17 @@ for (const width of [375, 768, 1280]) {
         providers={[{ provider: "openai-codex", connected: false, active: false, accountId: null, expiresAt: null }]}
         catalog={[
           { provider: "openai-codex", kind: "oauth", label: "ChatGPT", models: [], connected: false, available: false },
-          { provider: "openai-api", kind: "enrich", label: "OpenAI API", models: [{ id: "gpt-5", label: "GPT" }], connected: false, available: false },
+          { provider: "anthropic-claude", kind: "enrich", label: "Claude", models: [{ id: "claude-sonnet", label: "Claude Sonnet" }], connected: false, available: false },
         ]}
         initial={settings}
         defaultLabel={null}
-        openAI={{ configured: false, model: "gpt-5" }}
         oauthContent={<p>합성 OAuth 상태</p>}
         modelContent={<p>합성 모델 선택</p>}
         accountContent={<p>합성 계정</p>}
       />,
     );
-    await expect(settingsView.getByRole("heading", { name: "서버 소유 OpenAI API" })).toBeVisible();
+    await expect(settingsView.getByRole("heading", { name: "사용자 OAuth 연결" })).toBeVisible();
+    await expect(settingsView.getByRole("heading", { name: "서버 소유 OpenAI API" })).toHaveCount(0);
     await settingsView.screenshot({ path: `.omo/evidence/business-card-priority-fixes/task-11-core-settings-${width}.png`, animations: "disabled" });
   });
 }

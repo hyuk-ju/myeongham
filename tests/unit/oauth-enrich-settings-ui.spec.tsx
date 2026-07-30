@@ -29,6 +29,6 @@ describe("OAuth company search disclosure", () => {
 
     expect(screen.getAllByText("비공식·실험").length).toBeGreaterThan(0);
     expect(screen.getByText(/예고 없이 중단될 수 있습니다/)).toBeVisible();
-    expect(screen.getByText(/Claude 또는 공식 OpenAI API/)).toBeVisible();
+    expect(screen.getByText(/Claude를 직접 선택/)).toBeVisible();
   });
 });

@@ -40,14 +40,6 @@ const catalog: CatalogEntry[] = [
     available: true,
   },
   {
-    provider: "openai-api",
-    kind: "enrich",
-    label: "OpenAI API (서버)",
-    models: [],
-    connected: true,
-    available: true,
-  },
-  {
     provider: "anthropic-claude",
     kind: "enrich",
     label: "Claude",
@@ -80,7 +72,6 @@ export function SettingsFixture() {
         catalog={catalog}
         initial={settingsInitial}
         defaultLabel="ChatGPT"
-        openAI={{ configured: true, model: "gpt-5.6" }}
         oauthContent={<ConnectAI providers={[provider]} />}
         modelContent={<ModelPicker catalog={catalog} initial={settingsInitial} defaultLabel="ChatGPT" />}
         accountContent={

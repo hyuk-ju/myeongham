@@ -121,12 +121,15 @@ describe("enrich route contracts", () => {
     expect(JSON.stringify(enrichBody)).not.toContain("secret upstream body");
   });
 
-  it("rejects a user-owned openai-api model in settings", async () => {
+  it.each([
+    ["provider only", null],
+    ["provider with model", "gpt-5.6"],
+  ])("rejects user-owned openai-api settings: %s", async (_name, model) => {
     const response = await settingsPost(
       request({
         extract: { provider: null, model: null },
         ask: { provider: null, model: null },
-        enrich: { provider: "openai-api", model: "gpt-5.6" },
+        enrich: { provider: "openai-api", model },
       }),
     );
 

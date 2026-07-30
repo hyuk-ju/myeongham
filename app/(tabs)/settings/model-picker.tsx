@@ -40,7 +40,7 @@ function oauthProvider(value: string): OAuthAIProvider | null {
 }
 
 function enrichProvider(value: string): EnrichProvider | null {
-  if (value === "openai-codex" || value === "anthropic-claude" || value === "openai-api") return value;
+  if (value === "openai-codex" || value === "anthropic-claude") return value;
   return null;
 }
 
@@ -165,14 +165,8 @@ export function ModelPicker({
             {isEnrich && current.provider === "openai-codex" ? (
               <div className="flex flex-wrap items-center gap-2 rounded-xl bg-warn-soft px-3.5 py-3 text-xs text-warn">
                 <StatusBadge tone="warning">비공식·실험</StatusBadge>
-                <span>ChatGPT 구독 OAuth 검색은 비공식 backend라 예고 없이 중단될 수 있습니다. 실패 시 자동 전환하지 않으며 Claude 또는 공식 OpenAI API를 직접 선택할 수 있습니다.</span>
+                <span>ChatGPT 구독 OAuth 검색은 비공식 backend라 예고 없이 중단될 수 있습니다. 실패 시 자동 전환하지 않으며 Claude를 직접 선택할 수 있습니다.</span>
               </div>
-            ) : null}
-            {isEnrich && current.provider === "openai-api" ? (
-              <p className="text-xs text-soft">OpenAI API 모델은 서버가 관리하므로 개인별 모델 입력이 없습니다.</p>
-            ) : null}
-            {isEnrich && current.provider === "openai-api" && !selected?.available ? (
-              <StatusBadge tone="warning">서버 API 키 설정 후 사용 가능</StatusBadge>
             ) : null}
           </div>
         );

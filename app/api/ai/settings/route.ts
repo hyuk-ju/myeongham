@@ -26,7 +26,7 @@ const OAUTH_CONFIG_SCHEMA = z
 
 const ENRICH_CONFIG_SCHEMA = z
   .object({
-    provider: z.enum(["openai-codex", "anthropic-claude", "openai-api"]).nullable(),
+    provider: z.enum(["openai-codex", "anthropic-claude"]).nullable(),
     model: z.string().nullable(),
   })
   .strict()
@@ -35,18 +35,11 @@ const ENRICH_CONFIG_SCHEMA = z
       context.addIssue({ code: "custom", message: "model_requires_provider" });
       return;
     }
-    if (config.provider === "openai-api" && config.model !== null) {
-      context.addIssue({ code: "custom", message: "openai_model_is_server_owned" });
-      return;
-    }
-    if (config.provider !== null && config.provider !== "openai-api" && config.model !== null &&
+    if (config.provider !== null && config.model !== null &&
       !MODEL_CATALOG[config.provider].models.some((model) => model.id === config.model)) {
       context.addIssue({ code: "custom", message: "invalid_model" });
     }
-  })
-  .transform((config) =>
-    config.provider === "openai-api" ? { provider: "openai-api" as const, model: null } : config,
-  );
+  });
 
 export const AI_SETTINGS_REQUEST_SCHEMA = z
   .object({

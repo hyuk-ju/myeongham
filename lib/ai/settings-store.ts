@@ -54,7 +54,6 @@ interface EnrichSettingsRow {
 }
 
 function readEnrichConfig(row: EnrichSettingsRow | null): EnrichTaskConfig {
-  if (row?.enrich_provider === "openai-api") return { provider: "openai-api", model: null };
   if (row?.enrich_provider === "openai-codex" || row?.enrich_provider === "anthropic-claude") {
     return { provider: row.enrich_provider, model: row.enrich_model };
   }

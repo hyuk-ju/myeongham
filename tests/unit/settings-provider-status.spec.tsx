@@ -15,14 +15,13 @@ const provider: ProviderState = {
 };
 
 describe("settings provider transparency", () => {
-  it("separates OAuth status from server OpenAI availability without key material", () => {
+  it("keeps provider settings focused on user OAuth without key material", () => {
     render(
       <SettingsView
         providers={[provider]}
         catalog={[]}
-        initial={{ extract: { provider: null, model: null }, ask: { provider: null, model: null }, enrich: { provider: "openai-api", model: null } }}
+        initial={{ extract: { provider: null, model: null }, ask: { provider: null, model: null }, enrich: { provider: null, model: null } }}
         defaultLabel="ChatGPT"
-        openAI={{ configured: false, model: "gpt-5.6" }}
         oauthContent={<ConnectAI providers={[provider]} />}
         modelContent={<div>models</div>}
         accountContent={<div>account</div>}
@@ -30,8 +29,8 @@ describe("settings provider transparency", () => {
     );
 
     expect(screen.getByRole("heading", { name: "사용자 OAuth 연결" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "서버 소유 OpenAI API" })).toBeVisible();
-    expect(screen.getByText("설정 필요")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "서버 소유 OpenAI API" })).toBeNull();
+    expect(screen.queryByText("설정 필요")).toBeNull();
     expect(screen.getByText("ac•••42")).toBeVisible();
     expect(screen.queryByText(/OPENAI_API_KEY/)).toBeNull();
   });

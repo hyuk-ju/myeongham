@@ -69,8 +69,9 @@ for (const [width, screenshot] of [
     await page.setViewportSize({ width, height: 900 });
     await page.route("**/api/chatgpt/start", async (route) => route.fulfill({ json: { authorizeUrl: "https://example.com/oauth" } }));
     await mount(<SettingsFixture />);
-    await expect(page.getByRole("heading", { name: "서버 소유 OpenAI API" })).toBeVisible();
-    await expect(page.getByText("ChatGPT 구독과 별도입니다.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "사용자 OAuth 연결" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "서버 소유 OpenAI API" })).toHaveCount(0);
+    await expect(page.getByText("회사 검색은 연결된 ChatGPT OAuth 또는 Claude OAuth 중에서 선택합니다.")).toBeVisible();
     await expect(page.getByText("비공식·실험", { exact: true })).toBeVisible();
     await expect(page.getByText(/실패 시 자동 전환하지 않으며/)).toBeVisible();
     await expect(page.getByText("마스킹 계정 ac•••42")).toBeVisible();

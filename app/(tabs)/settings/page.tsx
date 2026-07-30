@@ -3,7 +3,6 @@ import { requireUser } from "@/lib/auth";
 import { getTokenRows } from "@/lib/ai/token-store";
 import { getAISettings } from "@/lib/ai/settings-store";
 import { MODEL_CATALOG } from "@/lib/ai/llm";
-import { serverEnv } from "@/lib/env";
 import { ConnectAI, type ProviderKey, type ProviderState } from "./connect-ai";
 import { ModelPicker, type CatalogEntry } from "./model-picker";
 import { SettingsView } from "./settings-view";
@@ -63,14 +62,6 @@ export default async function SettingsPage() {
       available: rows.some((row) => row.provider === "openai-codex"),
     },
     {
-      provider: "openai-api" as const,
-      kind: "enrich" as const,
-      label: "OpenAI API (서버)",
-      models: [],
-      connected: Boolean(serverEnv.openaiApiKey),
-      available: Boolean(serverEnv.openaiApiKey),
-    },
-    {
       provider: "anthropic-claude" as const,
       kind: "enrich" as const,
       label: MODEL_CATALOG["anthropic-claude"].label,
@@ -86,7 +77,6 @@ export default async function SettingsPage() {
       catalog={catalog}
       initial={aiSettings}
       defaultLabel={defaultLabel}
-      openAI={{ configured: Boolean(serverEnv.openaiApiKey), model: serverEnv.openaiSearchModel }}
       oauthContent={<ConnectAI providers={providers} />}
       modelContent={<ModelPicker catalog={catalog} initial={aiSettings} defaultLabel={defaultLabel} />}
       accountContent={
