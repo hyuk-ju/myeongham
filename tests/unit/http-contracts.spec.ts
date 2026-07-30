@@ -11,6 +11,7 @@ import {
   parseDraftRecord,
   parseDraftResponse,
   parseDraftUploadRequest,
+  parseSignedUrls,
 } from "@/lib/http-contracts";
 
 const fixture = (name: string) =>
@@ -202,6 +203,21 @@ describe("HTTP boundary contracts", () => {
       enrich: { ...enrich, sources: ["https://example.test/company"] },
       image_url: null,
     })).toEqual({ ok: false, code: "invalid_response" });
+  });
+
+  it("Given Supabase Storage signed URL rows When parsed Then SDK metadata does not reject usable URLs", () => {
+    expect(parseSignedUrls([{
+      path: "owner/card.jpg",
+      signedURL: "/object/sign/card-images/owner/card.jpg?token=raw",
+      signedUrl: "https://example.test/storage/v1/object/sign/card-images/owner/card.jpg?token=encoded",
+      error: null,
+    }])).toEqual({
+      ok: true,
+      value: [{
+        path: "owner/card.jpg",
+        signedUrl: "https://example.test/storage/v1/object/sign/card-images/owner/card.jpg?token=encoded",
+      }],
+    });
   });
 
   it("Given a bounded card-save body When parsed Then draft handoff fields and card values are typed", () => {

@@ -140,7 +140,18 @@ const BulkCapabilitiesSchema = z.object({
 }).strict();
 const CardSaveResponseSchema = z.object({ id: z.string().uuid(), created: z.boolean() }).strict();
 const FinalizeDraftResponseSchema = z.object({ id: z.string().uuid(), created: z.literal(true) }).strict();
-const SignedUrlSchema = z.object({ path: boundedText(1_000), signedUrl: absoluteUrl }).strict();
+const SignedUrlSchema = z.object({
+  path: boundedText(1_000),
+  signedUrl: absoluteUrl.nullable().optional(),
+  signedURL: z.string().nullable().optional(),
+  error: z.unknown().nullable().optional(),
+}).strict().transform(({ path, signedUrl }, ctx) => {
+  if (typeof signedUrl !== "string") {
+    ctx.addIssue({ code: "custom", message: "Missing signedUrl" });
+    return z.NEVER;
+  }
+  return { path, signedUrl };
+});
 const optionalCardText = (maximum: number) => boundedText(maximum).nullable().optional().default(null);
 const optionalUuid = z.string().uuid().nullable().optional().default(null);
 const CardSaveRequestSchema = z.object({
