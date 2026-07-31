@@ -4,11 +4,14 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  CARD_LIMITS,
   errorResponse,
   MAX_JSON_BODY_BYTES,
   parseBulkCapabilitiesRequest,
   parseCardSaveRequest,
+  parseDraftListResponse,
   parseDraftRecord,
+  parseDraftRecords,
   parseDraftResponse,
   parseDraftUploadRequest,
   parseSignedUrls,
@@ -35,6 +38,17 @@ function draftRecord(status: string) {
     created_at: "2026-07-29T00:00:00.000Z",
   };
 }
+
+/** 실제로 대기열을 막았던 명함(품목 나열형)을 본뜬 추출 결과 */
+const extractedCard = {
+  name: "박규민", name_en: null, title: "대표이사", department: null,
+  company: "(주)미르텍", company_en: null,
+  phone: "070-4714-2900", mobile: "010-8859-0413", mobile2: null, fax: "070-4032-5893",
+  email: "mirtekpcb@naver.com", email2: null, website: null,
+  address: "인천광역시 서구 건지로", postal_code: null, tax_code: null,
+  raw_text: "(주)미르텍 PCB Machine & Materials Sales", industry: "PCB 장비 및 자재 판매",
+  capabilities: ["PCB"], confidence: 0.95,
+};
 
 describe("HTTP boundary contracts", () => {
   it("Given malformed or oversized JSON When parsed Then stable machine errors are returned", async () => {
@@ -183,6 +197,58 @@ describe("HTTP boundary contracts", () => {
       ok: false,
       code: "invalid_response",
     });
+  });
+
+  it("Given more capability tags than the contract allows When a draft is parsed Then the row survives with the tags clamped", () => {
+    const capabilities = Array.from({ length: CARD_LIMITS.tags + 3 }, (_, index) => `태그${index}`);
+
+    const parsed = parseDraftRecord({
+      ...draftRecord("extracted"),
+      extracted: { ...extractedCard, capabilities },
+    });
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.ok && parsed.value.extracted?.capabilities).toEqual(
+      capabilities.slice(0, CARD_LIMITS.tags),
+    );
+  });
+
+  it("Given an oversized tag or error message When a draft is parsed Then the row is clamped instead of rejected", () => {
+    const parsed = parseDraftRecord({
+      ...draftRecord("failed"),
+      error: "가".repeat(CARD_LIMITS.error + 500),
+      extracted: { ...extractedCard, capabilities: ["가".repeat(CARD_LIMITS.tag + 40)] },
+    });
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.ok && parsed.value.error?.length).toBe(CARD_LIMITS.error);
+    expect(parsed.ok && parsed.value.extracted?.capabilities[0].length).toBe(CARD_LIMITS.tag);
+  });
+
+  it("Given one unsalvageable row in a list When the list is parsed Then the other rows still load", () => {
+    const good = { ...draftRecord("pending"), id: "11111111-1111-4111-8111-111111111111" };
+    const broken = { ...draftRecord("pending"), id: "22222222-2222-4222-8222-222222222222", status: "unknown" };
+
+    const parsed = parseDraftRecords([good, broken, { id: "not-a-uuid" }]);
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.ok && parsed.value.map((row) => [row.id, row.status, row.error])).toEqual([
+      [good.id, "pending", null],
+      [broken.id, "failed", "invalid_record"],
+    ]);
+  });
+
+  it("Given a poisoned row in the draft list response When the client parses it Then the queue is not wiped out", () => {
+    const drafts = [
+      { ...draftRecord("extracted"), image_url: null },
+      { ...draftRecord("extracted"), id: "33333333-3333-4333-8333-333333333333", status: "nope", image_url: null },
+    ];
+
+    const parsed = parseDraftListResponse({ drafts });
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.ok && parsed.value).toHaveLength(2);
+    expect(parsed.ok && parsed.value[1]).toMatchObject({ status: "failed", image_url: null });
   });
 
   it("Given a PostgreSQL timestamptz offset When a draft is parsed Then the server record is accepted", () => {

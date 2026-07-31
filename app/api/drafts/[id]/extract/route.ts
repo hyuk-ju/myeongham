@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthorizedUser } from "@/lib/auth";
 import { extractCardFromImage } from "@/lib/ai/extract";
 import { DRAFT_COLUMNS, withImageUrlsResult } from "@/lib/drafts";
-import { errorResponse } from "@/lib/http-contracts";
+import { CARD_LIMITS, errorResponse } from "@/lib/http-contracts";
 import { validateDownloadedImage } from "@/lib/image-signature";
 
 export const maxDuration = 120;
@@ -141,9 +141,10 @@ async function failClaim(
   message: string,
 ): Promise<string | null> {
   const result = await supabase.rpc("fail_card_draft_extraction", {
+    // 계약 상한을 넘는 에러 문구를 저장하면 그 행은 다시 읽히지 않는다.
+    p_error: message.slice(0, CARD_LIMITS.error),
     p_draft_id: id,
     p_processing_token: token,
-    p_error: message,
   });
   if (result.error) return null;
   const row = parseRpcRow(result.data);

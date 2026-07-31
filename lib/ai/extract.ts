@@ -7,6 +7,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { callAI, parseJsonObject } from "@/lib/ai/llm";
+import { CARD_LIMITS, normalizeExtractedCard, parseExtractedCard } from "@/lib/http-contracts";
 import { normalizePhone, splitMultiValue } from "@/lib/phone";
 
 export interface ExtractedCard {
@@ -74,6 +75,8 @@ const INSTRUCTIONS = `당신은 비즈니스 명함 판독 전문가입니다. �
   예: "HYUNWOO PCB" → "PCB 제조", 실험기구 이미지 → "실험장비". 단서가 없으면 null.
 - capabilities: 이 회사가 만들거나 다루는 것으로 보이는 품목/역량 태그 배열
   (한국어 명사형, 예: "정밀가공", "사출금형", "PCB"). 명함에 근거가 있을 때만. 없으면 [].
+  **최대 ${CARD_LIMITS.tags}개**, 태그 하나는 ${CARD_LIMITS.tag}자 이내. 품목이 더 많으면
+  대표적인 것부터 골라 ${CARD_LIMITS.tags}개까지만 넣는다.
 - confidence: 전체 추출 신뢰도 0~1. 이미지가 흐리거나 일부만 읽혔으면 낮게.
 
 출력 스키마:
@@ -113,12 +116,16 @@ function parseCardJson(raw: string): ExtractedCard {
     if (typeof v === "string") (card[key] as string) = normalizePhone(v);
   }
 
-  card.capabilities = Array.isArray(parsed.capabilities)
-    ? parsed.capabilities.filter((t): t is string => typeof t === "string" && !!t.trim())
-    : [];
-  const conf = Number(parsed.confidence);
-  card.confidence = Number.isFinite(conf) ? Math.min(1, Math.max(0, conf)) : 0.5;
-  return card;
+  card.capabilities = Array.isArray(parsed.capabilities) ? parsed.capabilities : [];
+  card.confidence = Number(parsed.confidence);
+
+  // 저장 전에 응답 계약과 **같은 상한**으로 다듬고 검증한다. 모델은 지시를
+  // 어기고 태그를 13개씩 보내기도 하는데, 그대로 저장하면 그 행은 다시 읽히지
+  // 않아 대기열 조회 전체가 502 로 죽는다. 여기서 못 막으면 사용자가 스스로
+  // 복구할 방법이 없으므로, 통과하지 못한 결과는 아예 저장하지 않는다.
+  const contract = parseExtractedCard(normalizeExtractedCard(card));
+  if (!contract.ok) throw new Error("추출 결과가 저장 형식을 벗어났습니다.");
+  return contract.value as ExtractedCard;
 }
 
 /**

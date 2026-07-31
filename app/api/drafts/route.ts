@@ -5,6 +5,7 @@ import { DRAFT_COLUMNS, withImageUrlsResult } from "@/lib/drafts";
 import {
   errorResponse,
   jsonResponse,
+  parseDraftRecord,
   parseDraftRecords,
   parseDraftUploadRequest,
 } from "@/lib/http-contracts";
@@ -46,9 +47,10 @@ export async function POST(request: NextRequest) {
     return errorResponse("invalid_response");
   }
 
-  const records = parseDraftRecords([data]);
-  if (!records.ok) return errorResponse(records.code);
-  const rows = await withImageUrlsResult(supabase, records.value);
+  // 방금 만든 행 하나뿐이라 구제 대상이 없다 — 엄격하게 판정한다.
+  const record = parseDraftRecord(data);
+  if (!record.ok) return errorResponse(record.code);
+  const rows = await withImageUrlsResult(supabase, [record.value]);
   if (!rows.ok) return errorResponse(rows.code);
   const row = rows.value[0];
   if (row === undefined) return errorResponse("invalid_response");

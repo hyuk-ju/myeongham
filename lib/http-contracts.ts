@@ -71,6 +71,8 @@ export type CardSaveRequest = {
   readonly met_context: string | null;
 };
 
+export type ExtractedCardRecord = ReadonlyExtractedCard;
+
 type ReadonlyExtractedCard = {
   readonly name: string | null;
   readonly name_en: string | null;
@@ -105,38 +107,90 @@ type ReadonlyEnrichSuggestion = {
   }>;
 };
 
+/**
+ * 응답 계약이 정한 상한 — 스키마와 정규화가 **같은 값**을 본다.
+ *
+ * 이 상한이 쓰기 쪽과 갈라지면 "저장은 되는데 다시 못 읽는" 행이 생긴다.
+ * 그런 행은 목록 조회를 502 로 무너뜨리고, 목록이 안 뜨니 사용자가 그 행을
+ * 지울 수도 없어 계정이 통째로 막힌다. 상한을 바꿀 일이 있으면 여기만 고친다.
+ */
+export const CARD_LIMITS = {
+  text: 500,
+  phone: 64,
+  rawText: 10_000,
+  summary: 1_000,
+  tag: 80,
+  tags: 12,
+  sourceTitle: 200,
+  sources: 10,
+  url: 2_000,
+  path: 1_000,
+  error: 1_000,
+} as const;
+
+/** 정규화가 다듬어 주는 필드 목록. 스키마 키와 1:1 로 유지한다. */
+const CARD_TEXT_FIELDS = [
+  "name", "name_en", "title", "department", "company", "company_en",
+  "email", "email2", "website", "address", "postal_code", "tax_code", "industry",
+] as const;
+const CARD_PHONE_FIELDS = ["phone", "mobile", "mobile2", "fax"] as const;
+
 const boundedText = (maximum: number) => z.string().trim().min(1).max(maximum);
 const nullableText = (maximum: number) => boundedText(maximum).nullable();
-const absoluteUrl = boundedText(2_000)
+const absoluteUrl = boundedText(CARD_LIMITS.url)
   .url()
   .refine((value) => value.startsWith("https://") || value.startsWith("http://"));
-const httpsUrl = boundedText(2_000).url().startsWith("https://");
+const httpsUrl = boundedText(CARD_LIMITS.url).url().startsWith("https://");
+const tagList = z.array(boundedText(CARD_LIMITS.tag)).max(CARD_LIMITS.tags);
 
 const ExtractedCardSchema = z.object({
-  name: nullableText(500), name_en: nullableText(500), title: nullableText(500), department: nullableText(500),
-  company: nullableText(500), company_en: nullableText(500), phone: nullableText(64), mobile: nullableText(64),
-  mobile2: nullableText(64), fax: nullableText(64), email: nullableText(500), email2: nullableText(500),
-  website: nullableText(500), address: nullableText(500), postal_code: nullableText(500), tax_code: nullableText(500),
-  raw_text: nullableText(10_000), industry: nullableText(500),
-  capabilities: z.array(boundedText(80)).max(12), confidence: z.number().min(0).max(1),
+  name: nullableText(CARD_LIMITS.text), name_en: nullableText(CARD_LIMITS.text),
+  title: nullableText(CARD_LIMITS.text), department: nullableText(CARD_LIMITS.text),
+  company: nullableText(CARD_LIMITS.text), company_en: nullableText(CARD_LIMITS.text),
+  phone: nullableText(CARD_LIMITS.phone), mobile: nullableText(CARD_LIMITS.phone),
+  mobile2: nullableText(CARD_LIMITS.phone), fax: nullableText(CARD_LIMITS.phone),
+  email: nullableText(CARD_LIMITS.text), email2: nullableText(CARD_LIMITS.text),
+  website: nullableText(CARD_LIMITS.text), address: nullableText(CARD_LIMITS.text),
+  postal_code: nullableText(CARD_LIMITS.text), tax_code: nullableText(CARD_LIMITS.text),
+  raw_text: nullableText(CARD_LIMITS.rawText), industry: nullableText(CARD_LIMITS.text),
+  capabilities: tagList, confidence: z.number().min(0).max(1),
 }).strict();
 
 const EnrichSuggestionSchema = z.object({
-  industry: nullableText(500), capabilities: z.array(boundedText(80)).max(12), summary: nullableText(1_000),
-  confident: z.boolean(),
-  sources: z.array(z.object({ url: httpsUrl, title: boundedText(200) }).strict()).max(10),
+  industry: nullableText(CARD_LIMITS.text), capabilities: tagList,
+  summary: nullableText(CARD_LIMITS.summary), confident: z.boolean(),
+  sources: z.array(
+    z.object({ url: httpsUrl, title: boundedText(CARD_LIMITS.sourceTitle) }).strict(),
+  ).max(CARD_LIMITS.sources),
 }).strict();
 
 const DraftRecordSchema = z.object({
-  id: z.string().uuid(), image_path: boundedText(1_000),
+  id: z.string().uuid(), image_path: boundedText(CARD_LIMITS.path),
   status: z.enum(["pending", "processing", "extracted", "failed"]),
-  extracted: ExtractedCardSchema.nullable(), error: nullableText(1_000), attempts: z.number().int().min(0),
+  extracted: ExtractedCardSchema.nullable(), error: nullableText(CARD_LIMITS.error),
+  attempts: z.number().int().min(0),
   enrich: EnrichSuggestionSchema.nullable(), created_at: z.iso.datetime({ offset: true }),
 }).strict();
 
 const DraftResponseSchema = DraftRecordSchema.extend({ image_url: absoluteUrl.nullable() });
+
+/**
+ * 계약을 못 지키는 행에서 최소한의 신원만 건져낸다.
+ *
+ * 이걸로 내려보낸 행은 화면에 "실패" 카드로 뜨므로, 사용자가 직접 지우거나
+ * 다시 시도할 수 있다. 목록 전체가 사라지는 것보다 언제나 낫다.
+ */
+const SalvagedDraftSchema = z.object({
+  id: z.string().uuid(), image_path: boundedText(CARD_LIMITS.path),
+  created_at: z.iso.datetime({ offset: true }),
+  attempts: z.number().int().min(0).catch(0),
+}).transform((row): DraftRecord => ({
+  ...row, status: "failed", extracted: null, enrich: null, error: "invalid_record",
+}));
+
 const BulkCapabilitiesSchema = z.object({
-  company: boundedText(500), capabilities: z.array(boundedText(80)).min(1).max(12), industry: nullableText(500).default(null),
+  company: boundedText(CARD_LIMITS.text), capabilities: tagList.min(1),
+  industry: nullableText(CARD_LIMITS.text).default(null),
 }).strict();
 const CardSaveResponseSchema = z.object({ id: z.string().uuid(), created: z.boolean() }).strict();
 const FinalizeDraftResponseSchema = z.object({ id: z.string().uuid(), created: z.literal(true) }).strict();
@@ -230,22 +284,137 @@ export async function parseBulkCapabilitiesRequest(request: Request): Promise<Co
   return parseInputSchema(BulkCapabilitiesSchema, body.value);
 }
 
+/**
+ * AI 응답이나 저장된 행을 계약이 정한 상한에 맞춰 다듬는다 (검증이 아니라 정규화).
+ *
+ * 쓰기 직전과 읽기 직후 **양쪽에서** 부른다. 쓰기 쪽이 이걸 통과시키면 DB 에
+ * 못 읽는 행이 생기지 않고, 읽기 쪽이 한 번 더 부르므로 이미 저장돼 버린
+ * 과거의 불량 행도 조회 시점에 저절로 복구된다.
+ */
+export function normalizeExtractedCard(value: unknown): unknown {
+  if (!isPlainObject(value)) return value;
+  const card: Record<string, unknown> = {};
+  for (const key of CARD_TEXT_FIELDS) card[key] = clampText(value[key], CARD_LIMITS.text);
+  for (const key of CARD_PHONE_FIELDS) card[key] = clampText(value[key], CARD_LIMITS.phone);
+  card.raw_text = clampText(value.raw_text, CARD_LIMITS.rawText);
+  card.capabilities = clampTags(value.capabilities);
+  const confidence = Number(value.confidence);
+  card.confidence = Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0.5;
+  return card;
+}
+
+export function normalizeEnrichSuggestion(value: unknown): unknown {
+  if (!isPlainObject(value)) return value;
+  return {
+    industry: clampText(value.industry, CARD_LIMITS.text),
+    capabilities: clampTags(value.capabilities),
+    summary: clampText(value.summary, CARD_LIMITS.summary),
+    confident: value.confident === true,
+    sources: clampSources(value.sources),
+  };
+}
+
+export function parseExtractedCard(value: unknown): ContractResult<ExtractedCardRecord> {
+  return parseSchema(ExtractedCardSchema, value);
+}
+
 export function parseDraftRecord(value: unknown): ContractResult<DraftRecord> {
-  return parseSchema(DraftRecordSchema, value);
+  return parseSchema(DraftRecordSchema, normalizeDraftRow(value));
 }
 
 export function parseDraftRecords(value: unknown): ContractResult<readonly DraftRecord[]> {
-  return parseSchema(z.array(DraftRecordSchema), value);
+  return parseDraftRows(value, DraftRecordSchema, (row) => row);
 }
 
 export function parseDraftResponse(value: unknown): ContractResult<DraftResponse> {
-  return parseSchema(DraftResponseSchema, value);
+  return parseSchema(DraftResponseSchema, normalizeDraftRow(value));
 }
 
 export function parseDraftListResponse(value: unknown): ContractResult<readonly DraftResponse[]> {
-  const parsed = parseSchema(z.object({ drafts: z.array(DraftResponseSchema) }).strict(), value);
-  if (!parsed.ok) return parsed;
-  return success(parsed.value.drafts);
+  if (!isPlainObject(value)) return failure("invalid_response");
+  return parseDraftRows(value.drafts, DraftResponseSchema, (row) => ({ ...row, image_url: null }));
+}
+
+/**
+ * 목록은 **행 단위로** 판정한다.
+ *
+ * 배열 하나로 통째로 검증하면 계약을 어긴 행 하나가 목록 전체를 502 로
+ * 무너뜨리고, 목록이 안 뜨니 사용자는 그 행을 지울 수도 없어 대기열이 영구히
+ * 막힌다. 살릴 수 없는 행은 "실패" 카드로 내려보내 스스로 복구할 길을 남긴다.
+ */
+function parseDraftRows<T>(
+  value: unknown,
+  schema: z.ZodType<T>,
+  salvage: (row: DraftRecord) => T,
+): ContractResult<readonly T[]> {
+  if (!Array.isArray(value)) return failure("invalid_response");
+  const rows: T[] = [];
+  for (const entry of value) {
+    const parsed = parseSchema(schema, normalizeDraftRow(entry));
+    if (parsed.ok) {
+      rows.push(parsed.value);
+      continue;
+    }
+    const salvaged = parseSchema(SalvagedDraftSchema, entry);
+    if (salvaged.ok) rows.push(salvage(salvaged.value));
+  }
+  return success(rows);
+}
+
+function normalizeDraftRow(value: unknown): unknown {
+  if (!isPlainObject(value)) return value;
+  return {
+    ...value,
+    extracted: value.extracted == null ? null : normalizeExtractedCard(value.extracted),
+    enrich: value.enrich == null ? null : normalizeEnrichSuggestion(value.enrich),
+    error: clampText(value.error, CARD_LIMITS.error),
+  };
+}
+
+/** 빈 문자열은 null 로, 상한을 넘으면 잘라서 돌려준다. */
+function clampText(value: unknown, maximum: number): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length <= maximum) return trimmed;
+  const sliced = trimmed.slice(0, maximum);
+  // 서로게이트 쌍(이모지 등)을 반토막 내지 않는다.
+  const tail = sliced.charCodeAt(maximum - 1);
+  return (tail >= 0xd800 && tail <= 0xdbff ? sliced.slice(0, -1) : sliced).trimEnd();
+}
+
+function clampTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const tags: string[] = [];
+  for (const entry of value) {
+    const tag = clampText(entry, CARD_LIMITS.tag);
+    if (tag !== null && !tags.includes(tag)) tags.push(tag);
+    if (tags.length === CARD_LIMITS.tags) break;
+  }
+  return tags;
+}
+
+/**
+ * 출처는 개수와 길이만 다듬는다.
+ *
+ * 모양이 다른 항목은 **일부러 그대로 둬서 검증에서 걸리게** 한다. 태그 한두
+ * 개가 잘리는 것과 달리, 출처가 소리 없이 사라지면 웹 보강 결과의 근거 링크가
+ * 통째로 없어진 걸 아무도 알아채지 못한다.
+ */
+function clampSources(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  return value.slice(0, CARD_LIMITS.sources).map((entry) => {
+    if (!isPlainObject(entry)) return entry;
+    return {
+      ...entry,
+      url: clampText(entry.url, CARD_LIMITS.url) ?? entry.url,
+      title: clampText(entry.title, CARD_LIMITS.sourceTitle) ?? entry.title,
+    };
+  });
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function parseCardSaveResponse(value: unknown): ContractResult<CardSaveResponse> {
