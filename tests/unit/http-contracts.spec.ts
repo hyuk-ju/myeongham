@@ -82,7 +82,10 @@ describe("HTTP boundary contracts", () => {
     const overlong = new Request("http://example.test/api/cards/bulk-capabilities", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ company: "Acme", capabilities: Array.from({ length: 13 }, (_, index) => `tag-${index}`) }),
+      body: JSON.stringify({
+        company: "Acme",
+        capabilities: Array.from({ length: CARD_LIMITS.tags + 1 }, (_, index) => `tag-${index}`),
+      }),
     });
 
     await expect(parseBulkCapabilitiesRequest(unknown)).resolves.toEqual({

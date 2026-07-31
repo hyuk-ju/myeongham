@@ -120,7 +120,10 @@ export const CARD_LIMITS = {
   rawText: 10_000,
   summary: 1_000,
   tag: 80,
-  tags: 12,
+  /** 명함에서 뽑은 역량 태그 — private.is_valid_card_payload 의 상한과 같아야 한다 */
+  tags: 24,
+  /** 웹 보강 제안 태그 — private.is_valid_draft_enrich 의 상한과 같아야 한다 */
+  enrichTags: 12,
   sourceTitle: 200,
   sources: 10,
   url: 2_000,
@@ -141,7 +144,7 @@ const absoluteUrl = boundedText(CARD_LIMITS.url)
   .url()
   .refine((value) => value.startsWith("https://") || value.startsWith("http://"));
 const httpsUrl = boundedText(CARD_LIMITS.url).url().startsWith("https://");
-const tagList = z.array(boundedText(CARD_LIMITS.tag)).max(CARD_LIMITS.tags);
+const tagList = (maximum: number) => z.array(boundedText(CARD_LIMITS.tag)).max(maximum);
 
 const ExtractedCardSchema = z.object({
   name: nullableText(CARD_LIMITS.text), name_en: nullableText(CARD_LIMITS.text),
@@ -153,11 +156,11 @@ const ExtractedCardSchema = z.object({
   website: nullableText(CARD_LIMITS.text), address: nullableText(CARD_LIMITS.text),
   postal_code: nullableText(CARD_LIMITS.text), tax_code: nullableText(CARD_LIMITS.text),
   raw_text: nullableText(CARD_LIMITS.rawText), industry: nullableText(CARD_LIMITS.text),
-  capabilities: tagList, confidence: z.number().min(0).max(1),
+  capabilities: tagList(CARD_LIMITS.tags), confidence: z.number().min(0).max(1),
 }).strict();
 
 const EnrichSuggestionSchema = z.object({
-  industry: nullableText(CARD_LIMITS.text), capabilities: tagList,
+  industry: nullableText(CARD_LIMITS.text), capabilities: tagList(CARD_LIMITS.enrichTags),
   summary: nullableText(CARD_LIMITS.summary), confident: z.boolean(),
   sources: z.array(
     z.object({ url: httpsUrl, title: boundedText(CARD_LIMITS.sourceTitle) }).strict(),
@@ -189,7 +192,7 @@ const SalvagedDraftSchema = z.object({
 }));
 
 const BulkCapabilitiesSchema = z.object({
-  company: boundedText(CARD_LIMITS.text), capabilities: tagList.min(1),
+  company: boundedText(CARD_LIMITS.text), capabilities: tagList(CARD_LIMITS.tags).min(1),
   industry: nullableText(CARD_LIMITS.text).default(null),
 }).strict();
 const CardSaveResponseSchema = z.object({ id: z.string().uuid(), created: z.boolean() }).strict();
@@ -230,7 +233,7 @@ const CardSaveRequestSchema = z.object({
   tax_code: optionalCardText(500),
   raw_text: optionalCardText(10_000),
   industry: optionalCardText(500),
-  capabilities: z.array(boundedText(80)).max(12).optional().default([])
+  capabilities: tagList(CARD_LIMITS.tags).optional().default([])
     .transform((values) => [...new Set(values)]),
   capabilities_source: z.enum(["manual", "web"]).nullable().optional().default(null),
   confidence: z.number().finite().min(0).max(1).nullable().optional().default(null),
@@ -297,7 +300,7 @@ export function normalizeExtractedCard(value: unknown): unknown {
   for (const key of CARD_TEXT_FIELDS) card[key] = clampText(value[key], CARD_LIMITS.text);
   for (const key of CARD_PHONE_FIELDS) card[key] = clampText(value[key], CARD_LIMITS.phone);
   card.raw_text = clampText(value.raw_text, CARD_LIMITS.rawText);
-  card.capabilities = clampTags(value.capabilities);
+  card.capabilities = clampTags(value.capabilities, CARD_LIMITS.tags);
   const confidence = Number(value.confidence);
   card.confidence = Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0.5;
   return card;
@@ -307,7 +310,7 @@ export function normalizeEnrichSuggestion(value: unknown): unknown {
   if (!isPlainObject(value)) return value;
   return {
     industry: clampText(value.industry, CARD_LIMITS.text),
-    capabilities: clampTags(value.capabilities),
+    capabilities: clampTags(value.capabilities, CARD_LIMITS.enrichTags),
     summary: clampText(value.summary, CARD_LIMITS.summary),
     confident: value.confident === true,
     sources: clampSources(value.sources),
@@ -383,13 +386,13 @@ function clampText(value: unknown, maximum: number): string | null {
   return (tail >= 0xd800 && tail <= 0xdbff ? sliced.slice(0, -1) : sliced).trimEnd();
 }
 
-function clampTags(value: unknown): string[] {
+function clampTags(value: unknown, maximum: number): string[] {
   if (!Array.isArray(value)) return [];
   const tags: string[] = [];
   for (const entry of value) {
     const tag = clampText(entry, CARD_LIMITS.tag);
     if (tag !== null && !tags.includes(tag)) tags.push(tag);
-    if (tags.length === CARD_LIMITS.tags) break;
+    if (tags.length === maximum) break;
   }
   return tags;
 }

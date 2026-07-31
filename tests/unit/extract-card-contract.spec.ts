@@ -27,7 +27,8 @@ function respondWith(card: Record<string, unknown>) {
 }
 
 describe("extracted card write contract", () => {
-  it("Given a product-heavy card When the model returns more tags than allowed Then the stored card stays readable", async () => {
+  it("Given the product-heavy card that broke the queue When extracted Then every tag survives", async () => {
+    // 실제로 대기열을 막았던 명함. 14개 전부 남아야 한다.
     const capabilities = [
       "PCB", "PCB 장비", "PCB 자재", "LDI", "AOI", "AVI", "BBT", "X-Ray 장비",
       "홀 플러깅", "오토 필러", "라미네이터", "잉크젯 프린터", "PSR 스프레이", "자동화 장비",
@@ -36,7 +37,17 @@ describe("extracted card write contract", () => {
 
     const card = await extractCardFromImage(supabase, "owner", "data:image/jpeg;base64,AA==");
 
-    expect(capabilities.length).toBeGreaterThan(CARD_LIMITS.tags);
+    expect(capabilities.length).toBeLessThanOrEqual(CARD_LIMITS.tags);
+    expect(card.capabilities).toEqual(capabilities);
+    expect(parseExtractedCard(card).ok).toBe(true);
+  });
+
+  it("Given more tags than the contract allows When extracted Then the card is clamped instead of poisoning the queue", async () => {
+    const capabilities = Array.from({ length: CARD_LIMITS.tags + 5 }, (_, index) => `품목${index}`);
+    respondWith({ capabilities });
+
+    const card = await extractCardFromImage(supabase, "owner", "data:image/jpeg;base64,AA==");
+
     expect(card.capabilities).toEqual(capabilities.slice(0, CARD_LIMITS.tags));
     expect(parseExtractedCard(card).ok).toBe(true);
   });
